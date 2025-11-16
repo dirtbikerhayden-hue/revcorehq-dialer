@@ -475,8 +475,8 @@ function unlockContact(contactId) {
 //         ADMIN BACKEND
 // ===============================
 
-// For now we hard-code this so it “just works”.
-const ADMIN_PASSWORD = 'SuperSecretAdminPassword123';
+// Admin password from env with fallback
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '5683';
 
 function isValidAdmin(req) {
   const key = req.header('x-admin-key');
@@ -1829,10 +1829,17 @@ function getAgentStatus(agentId) {
 //      FRONTEND ROUTES
 // =========================
 
-app.get('/dialer', (req, res) => {
+// Dialer as home page
+app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dialer.html'));
 });
 
+// Keep /dialer for backwards compatibility
+app.get('/dialer', (req, res) => {
+  res.redirect('/');
+});
+
+// Admin console
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
@@ -2302,7 +2309,7 @@ app.post('/api/disposition', async (req, res) => {
 });
 
 // health check
-app.get('/', (req, res) => {
+app.get('/health', (req, res) => {
   res.send('Rehash Dialer backend is running.');
 });
 
