@@ -1,0 +1,2605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rehash Dialer • RevCoreHQ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    /* ---------- THEME TOKENS (aligned with careers page) ---------- */
+    :root {
+      --bg: #020617;
+      --bg-soft: #030712;
+      --card: #020617;
+      --card-inner: #020617;
+      --border-subtle: rgba(148, 163, 184, 0.35);
+      --text-main: #e5f0ff;
+      --text-subtle: #8b9bb5;
+      --accent: #4df3a3;
+      --accent-alt: #3da9ff;
+      --accent-soft: rgba(77, 243, 163, 0.2);
+      --danger: #f97373;
+      --radius-xl: 22px;
+      --shadow-soft: 0 32px 120px rgba(0, 0, 0, 0.9);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Segoe UI", sans-serif;
+      color: var(--text-main);
+      background:
+        radial-gradient(circle at top left, rgba(61, 169, 255, 0.22), transparent 55%),
+        radial-gradient(circle at 80% 120%, rgba(77, 243, 163, 0.2), transparent 60%),
+        radial-gradient(circle at center, #020617 0, #020617 40%, #020617 100%);
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 32px 24px 48px;
+      overflow-x: hidden;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    /* ---------- FLOATING WHITE BUBBLES / STARS ---------- */
+
+    .bubble {
+      position: absolute;
+      border-radius: 999px;
+      background: radial-gradient(circle at 30% 20%, #ffffff, rgba(255,255,255,0.05));
+      opacity: 0.12;
+      filter: blur(0.5px);
+      animation: floatUp linear infinite;
+    }
+
+    .bubble.b1 { width: 6px; height: 6px; left: 10%; bottom: -20px; animation-duration: 18s; animation-delay: 0s; }
+    .bubble.b2 { width: 8px; height: 8px; left: 32%; bottom: -40px; animation-duration: 24s; animation-delay: 4s; }
+    .bubble.b3 { width: 5px; height: 5px; left: 55%; bottom: -30px; animation-duration: 20s; animation-delay: 2s; }
+    .bubble.b4 { width: 7px; height: 7px; left: 78%; bottom: -35px; animation-duration: 26s; animation-delay: 6s; }
+    .bubble.b5 { width: 4px; height: 4px; left: 20%; bottom: -25px; animation-duration: 22s; animation-delay: 8s; }
+    .bubble.b6 { width: 6px; height: 6px; left: 65%; bottom: -45px; animation-duration: 30s; animation-delay: 10s; }
+
+    @keyframes floatUp {
+      0%   { transform: translateY(0); opacity: 0; }
+      10%  { opacity: 0.14; }
+      80%  { opacity: 0.14; }
+      100% { transform: translateY(-110vh); opacity: 0; }
+    }
+
+    body::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(148, 163, 184, 0.25), transparent 60%),
+        radial-gradient(circle at 80% 90%, rgba(15, 23, 42, 0.6), transparent 75%);
+      opacity: 0.7;
+      mix-blend-mode: screen;
+    }
+
+    body::after {
+      content: "";
+      position: absolute;
+      top: -200px;
+      left: -200px;
+      width: 2px;
+      height: 2px;
+      border-radius: 50%;
+      background: #ffffff;
+      opacity: 0.28;
+      box-shadow:
+        120px 40px 0 0 rgba(255,255,255,0.5),
+        340px 160px 0 0 rgba(255,255,255,0.4),
+        640px 80px 0 0 rgba(255,255,255,0.35),
+        920px 220px 0 0 rgba(255,255,255,0.4),
+        240px 260px 0 0 rgba(255,255,255,0.3),
+        720px 300px 0 0 rgba(255,255,255,0.45),
+        1040px 180px 0 0 rgba(255,255,255,0.35),
+        540px 340px 0 0 rgba(255,255,255,0.25);
+      pointer-events: none;
+    }
+
+    .shell {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: minmax(0, 3.3fr) minmax(0, 2.2fr);
+      gap: 24px;
+      max-width: 1220px;
+      width: 100%;
+    }
+
+    body[data-locked="true"] .shell {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    body[data-locked="true"] .bubble,
+    body[data-locked="true"]::before,
+    body[data-locked="true"]::after {
+      opacity: 0;
+    }
+
+    body[data-locked="true"] {
+      background: #01030b;
+    }
+
+    @media (max-width: 960px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .side-column {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    @media (max-width: 960px) {
+      .side-column {
+        order: -1;
+      }
+    }
+
+    .card {
+      background: radial-gradient(circle at top left, rgba(19, 34, 70, 0.9), rgba(10, 17, 40, 0.98));
+      border-radius: var(--radius-xl);
+      padding: 20px 22px;
+      box-shadow: var(--shadow-soft);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: -40%;
+      opacity: 0.16;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(61, 169, 255, 0.8), transparent 55%),
+        radial-gradient(circle at 100% 100%, rgba(77, 243, 163, 0.9), transparent 55%);
+      mix-blend-mode: screen;
+      pointer-events: none;
+    }
+
+    .card-inner { position: relative; z-index: 1; }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .title-block h1 {
+      font-size: 1.12rem;
+      margin: 0 0 4px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .title-block span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      color: var(--text-subtle);
+    }
+
+    .pill {
+      padding: 3px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-subtle);
+    }
+
+    .agent-pill {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      font-size: 0.8rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: radial-gradient(circle at 0% 0%, rgba(77, 243, 163, 0.25), rgba(15, 23, 42, 0.95));
+    }
+
+    .agent-pill-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 10px rgba(77, 243, 163, 0.9);
+    }
+
+    .agent-pill-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.2;
+    }
+
+    .agent-status-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-subtle);
+    }
+
+    .agent-pill.status-online .agent-status-label { color: #bbf7d0; }
+    .agent-pill.status-away .agent-status-label { color: #fde68a; }
+    .agent-pill.status-offline .agent-status-label { color: #fecaca; }
+
+    .agent-status-duration {
+      font-size: 0.72rem;
+      color: var(--text-subtle);
+      margin-top: 4px;
+      text-align: right;
+    }
+
+    .agent-pill.status-offline {
+      animation: offlinePulse 2.4s ease-in-out infinite;
+      border-color: rgba(248, 113, 113, 0.8);
+    }
+
+    @keyframes offlinePulse {
+      0% { box-shadow: 0 0 8px rgba(248, 113, 113, 0.2); }
+      50% { box-shadow: 0 0 20px rgba(248, 113, 113, 0.5); }
+      100% { box-shadow: 0 0 8px rgba(248, 113, 113, 0.2); }
+    }
+
+    .assigned-campaign-display {
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 14px;
+      padding: 10px 14px;
+      font-size: 0.9rem;
+      background: rgba(6, 12, 32, 0.96);
+      color: var(--text-main);
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+    }
+
+    .assigned-campaign-display.unassigned {
+      color: #fecaca;
+      border-color: rgba(248, 113, 113, 0.6);
+    }
+
+    .assigned-campaign-note {
+      font-size: 0.72rem;
+      color: var(--text-subtle);
+      margin-top: 4px;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    label {
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--text-subtle);
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    select,
+    textarea {
+      width: 100%;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      background: rgba(6, 12, 32, 0.96);
+      color: var(--text-main);
+      padding: 9px 14px;
+      font-size: 0.9rem;
+      outline: none;
+    }
+
+    select:focus,
+    textarea:focus {
+      border-color: var(--accent-alt);
+      box-shadow: 0 0 0 1px rgba(61, 169, 255, 0.6);
+    }
+
+    textarea {
+      border-radius: 14px;
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    .campaign-group { flex: 2; min-width: 210px; }
+
+    .controls-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    button {
+      border-radius: 999px;
+      border: none;
+      font-size: 0.84rem;
+      font-weight: 600;
+      padding: 9px 18px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: transform 0.08s ease, box-shadow 0.08s ease, opacity 0.1s ease;
+      white-space: nowrap;
+    }
+
+    button:active { transform: translateY(1px); box-shadow: none; }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .btn-primary {
+      background: radial-gradient(circle at 0% 0%, #4df3a3, #22c55e);
+      color: #022c22;
+      box-shadow: 0 12px 32px rgba(34, 197, 94, 0.5);
+    }
+
+    .btn-neutral {
+      background: rgba(6, 12, 32, 0.96);
+      color: var(--text-subtle);
+      border: 1px solid rgba(148, 163, 184, 0.7);
+    }
+
+    .btn-danger {
+      background: radial-gradient(circle at top left, rgba(248, 113, 113, 0.22), rgba(127, 29, 29, 0.98));
+      border: 1px solid rgba(248, 113, 113, 0.7);
+      color: #fee2e2;
+    }
+
+    .btn-ghost {
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      background: rgba(5, 11, 28, 0.8);
+      color: var(--text-main);
+      padding: 8px 14px;
+      font-size: 0.78rem;
+    }
+
+    .btn-ghost.muted {
+      border-color: rgba(248, 113, 113, 0.6);
+      color: #fecaca;
+    }
+
+    .status-bar {
+      margin-top: 12px;
+      padding: 9px 12px;
+      border-radius: 999px;
+      background: rgba(8, 16, 40, 0.96);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      font-size: 0.78rem;
+      color: var(--text-subtle);
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .status-text span { color: var(--text-main); font-weight: 500; }
+
+    .status-chip {
+      padding: 4px 11px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.13em;
+      border: 1px solid rgba(148, 163, 184, 0.7);
+    }
+
+    .status-chip.running {
+      border-color: rgba(77, 243, 163, 0.9);
+      color: #bbf7d0;
+      background: rgba(22, 163, 74, 0.18);
+    }
+
+    .status-chip.paused {
+      border-color: rgba(148, 163, 184, 0.7);
+      color: #e5e7eb;
+      background: rgba(15, 23, 42, 0.9);
+    }
+
+    .status-chip.ended {
+      border-color: rgba(148, 163, 184, 0.9);
+      color: #9ca3af;
+      background: rgba(15, 23, 42, 0.96);
+    }
+
+    .call-utility-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 10px;
+    }
+
+    .current-lead {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.96), rgba(6, 12, 32, 0.98));
+      border: 1px solid rgba(31, 41, 55, 0.9);
+      font-size: 0.86rem;
+    }
+
+    .current-lead-title {
+      font-size: 0.76rem;
+      color: var(--text-subtle);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      margin-bottom: 6px;
+    }
+
+    .current-lead-main {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .current-lead-main strong { font-size: 0.96rem; }
+
+    .current-lead-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+      font-size: 0.8rem;
+      color: var(--text-subtle);
+    }
+
+    .tag-chip {
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(51, 65, 85, 0.9);
+      font-size: 0.7rem;
+      background: rgba(15, 23, 42, 0.96);
+    }
+
+    .badge-live {
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(77, 243, 163, 0.9);
+      color: #bbf7d0;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      background: rgba(22, 163, 74, 0.2);
+    }
+
+    .disposition-block {
+      margin-top: 20px;
+      padding-top: 14px;
+      border-top: 1px dashed rgba(51, 65, 85, 0.9);
+    }
+
+    .dispo-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+      margin-bottom: 8px;
+    }
+
+    .btn-dispo {
+      font-size: 0.76rem;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.7);
+      background: rgba(6, 12, 32, 0.96);
+      color: var(--text-subtle);
+    }
+
+    .btn-dispo.primary-dispo {
+      border-color: rgba(77, 243, 163, 0.9);
+      color: #bbf7d0;
+      background: rgba(22, 163, 74, 0.18);
+    }
+
+    .btn-dispo.booked {
+      border-color: rgba(61, 169, 255, 0.9);
+      color: #e0f2fe;
+      background: rgba(6, 12, 32, 0.96);
+    }
+
+    .note-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .note-label span { font-size: 0.75rem; color: var(--text-subtle); }
+
+    .note-label small {
+      font-size: 0.7rem;
+      color: rgba(148, 163, 184, 0.9);
+    }
+
+    .side-card-title {
+      font-size: 0.86rem;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--text-subtle);
+      margin-bottom: 10px;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .metric-pill {
+      background: radial-gradient(circle at top left, rgba(13, 23, 52, 0.96), rgba(5, 11, 28, 0.98));
+      border-radius: 18px;
+      padding: 10px 11px;
+      border: 1px solid rgba(51, 65, 85, 0.9);
+      text-align: left;
+    }
+
+    .metric-label {
+      font-size: 0.74rem;
+      color: var(--text-subtle);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.13em;
+    }
+
+    .metric-value {
+      font-size: 1.26rem;
+      font-weight: 600;
+    }
+
+    .metric-sub {
+      font-size: 0.74rem;
+      color: var(--text-subtle);
+      margin-top: 4px;
+    }
+
+    .duration-block {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .duration-item {
+      border: 1px dashed rgba(148, 163, 184, 0.4);
+      border-radius: 14px;
+      padding: 8px 10px;
+      background: rgba(5, 11, 28, 0.8);
+    }
+
+    .duration-label {
+      font-size: 0.72rem;
+      color: var(--text-subtle);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 4px;
+    }
+
+    .duration-value {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .goal-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .goal-card {
+      border: 1px solid rgba(77, 243, 163, 0.3);
+      border-radius: 18px;
+      padding: 12px 14px;
+      background: rgba(6, 12, 32, 0.96);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .goal-card::after {
+      content: "";
+      position: absolute;
+      inset: -20%;
+      background: radial-gradient(circle at top right, rgba(77, 243, 163, 0.1), transparent 60%);
+      pointer-events: none;
+    }
+
+    .goal-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: var(--text-subtle);
+      margin-bottom: 6px;
+    }
+
+    .goal-count {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .goal-bar {
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.25);
+      overflow: hidden;
+    }
+
+    .goal-bar-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #4df3a3, #22c55e);
+      width: 0%;
+      transition: width 0.25s ease;
+    }
+
+    .goal-card.goal-complete .goal-bar-fill {
+      background: linear-gradient(90deg, #fcd34d, #f97373);
+    }
+
+    .goal-card.celebrate {
+      animation: goalPop 0.6s ease;
+    }
+
+    @keyframes goalPop {
+      0% { transform: scale(1); box-shadow: 0 0 0 rgba(255,255,255,0); }
+      50% { transform: scale(1.03); box-shadow: 0 0 20px rgba(255, 255, 255, 0.2); }
+      100% { transform: scale(1); box-shadow: 0 0 0 rgba(255,255,255,0); }
+    }
+
+    .audio-settings {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px dashed rgba(31, 41, 55, 0.8);
+    }
+
+    .collapsible-pill {
+      width: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      background: rgba(77, 243, 163, 0.12);
+      border: 1px solid rgba(77, 243, 163, 0.35);
+      color: var(--text-main);
+      font-weight: 600;
+      font-size: 0.85rem;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .collapsible-pill:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+    }
+
+    .pill-chevron {
+      font-size: 0.9rem;
+      opacity: 0.8;
+      transition: transform 0.2s ease;
+    }
+
+    .collapsible-pill[aria-expanded="true"] .pill-chevron {
+      transform: rotate(180deg);
+    }
+
+    .script-block {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: radial-gradient(circle at top left, rgba(148, 163, 184, 0.08), rgba(15, 23, 42, 0.85));
+      border: 1px solid rgba(148, 163, 184, 0.25);
+    }
+
+    .script-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .script-title {
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 0.75rem;
+      color: var(--text-subtle);
+    }
+
+    .script-pill {
+      background: rgba(61, 169, 255, 0.15);
+      border: 1px solid rgba(61, 169, 255, 0.35);
+      color: #cde9ff;
+    }
+
+    .script-content {
+      display: none;
+      max-height: 460px;
+      overflow-y: auto;
+      padding-right: 6px;
+    }
+
+    .script-block.expanded .script-content {
+      display: block;
+    }
+
+    .script-section + .script-section {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px dashed rgba(51, 65, 85, 0.8);
+    }
+
+    .script-heading {
+      font-weight: 700;
+      margin-bottom: 6px;
+      font-size: 0.93rem;
+    }
+
+    .script-body {
+      color: var(--text-subtle);
+      font-size: 0.86rem;
+      line-height: 1.5;
+      white-space: pre-line;
+    }
+
+    .script-body p {
+      margin: 0 0 10px;
+    }
+
+    .script-body p:last-child {
+      margin-bottom: 0;
+    }
+
+    .page-stack {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 1220px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .stacked-sections {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .script-card .card-inner {
+      padding-top: 16px;
+    }
+
+    .calendar-frame {
+      width: 100%;
+      border: none;
+      overflow: hidden;
+      min-height: 760px;
+      border-radius: 12px;
+    }
+
+    .calendar-title {
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 0.78rem;
+      color: var(--text-subtle);
+      margin: 0 0 8px;
+    }
+
+    .incoming-modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.58);
+      z-index: 9999;
+    }
+
+    .incoming-card {
+      width: 440px;
+      background: rgba(8, 12, 24, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      padding: 18px 16px 20px;
+      box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+      position: relative;
+      animation: pulseGlow 2s ease-in-out infinite;
+    }
+
+    .incoming-title {
+      margin: 0 0 6px;
+      font-size: 1.05rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .incoming-meta {
+      color: var(--text-subtle);
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
+
+    .incoming-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .incoming-actions button {
+      min-width: 90px;
+    }
+
+    .incoming-priority {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      color: #facc15;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 0.72rem;
+      animation: pulseText 1.6s ease-in-out infinite;
+    }
+
+    @keyframes pulseGlow {
+      0% { box-shadow: 0 0 0 rgba(79, 209, 197, 0.18); }
+      50% { box-shadow: 0 0 30px rgba(79, 209, 197, 0.45); }
+      100% { box-shadow: 0 0 0 rgba(79, 209, 197, 0.18); }
+    }
+
+    @keyframes pulseText {
+      0% { opacity: 0.6; }
+      50% { opacity: 1; }
+      100% { opacity: 0.6; }
+    }
+
+    .audio-content {
+      margin-top: 14px;
+      display: none;
+    }
+
+    .audio-card.expanded .audio-content {
+      display: block;
+    }
+
+    .audio-select {
+      margin-bottom: 10px;
+    }
+
+    .audio-select label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-subtle);
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .audio-select select {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(6, 12, 32, 0.92);
+      color: var(--text-main);
+      padding: 7px 10px;
+      font-size: 0.82rem;
+      outline: none;
+    }
+
+    .audio-select select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(77, 243, 163, 0.35);
+    }
+
+    .audio-select small {
+      display: block;
+      font-size: 0.7rem;
+      margin-top: 4px;
+      color: rgba(148, 163, 184, 0.8);
+    }
+
+    .audio-refresh-btn {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(8, 16, 40, 0.9);
+      color: var(--text-main);
+      padding: 7px 12px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      margin-top: 4px;
+    }
+
+    .audio-refresh-btn:active {
+      transform: none;
+    }
+
+    .audio-note {
+      font-size: 0.72rem;
+      line-height: 1.4;
+      color: var(--text-subtle);
+      margin-top: 8px;
+    }
+
+    .log-list {
+      max-height: 160px;
+      overflow-y: auto;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 0.8rem;
+    }
+
+    .log-item {
+      padding: 6px 0;
+      border-bottom: 1px dashed rgba(31, 41, 55, 0.8);
+      display: block;
+    }
+
+    .log-item.log-empty {
+      border-bottom: none;
+      justify-content: center;
+      font-style: italic;
+      color: var(--text-subtle);
+    }
+
+    .log-item:last-child { border-bottom: none; }
+
+    .log-left { color: var(--text-subtle); }
+
+    .leaderboard {
+      margin-top: 18px;
+      padding-top: 12px;
+      border-top: 1px dashed rgba(51, 65, 85, 0.9);
+      font-size: 0.8rem;
+    }
+
+    .leaderboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .leaderboard-header span {
+      color: var(--text-subtle);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+    }
+
+    .leaderboard-rank {
+      padding: 3px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(77, 243, 163, 0.9);
+      color: #bbf7d0;
+      font-size: 0.74rem;
+      background: rgba(22, 163, 74, 0.22);
+    }
+
+    .leaderboard-list {
+      list-style: none;
+      margin: 4px 0 0;
+      padding: 0;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .leaderboard-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 4px 0;
+      border-bottom: 1px dashed rgba(31, 41, 55, 0.8);
+    }
+
+    .leaderboard-item:last-child { border-bottom: none; }
+
+    .leaderboard-left {
+      color: var(--text-subtle);
+      font-size: 0.78rem;
+    }
+
+    .leaderboard-left strong {
+      color: var(--text-main);
+      font-weight: 500;
+    }
+
+    .leaderboard-right {
+      font-size: 0.74rem;
+      color: var(--text-subtle);
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(30, 64, 175, 0.6);
+      border-radius: 999px;
+    }
+
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus {
+      -webkit-box-shadow: 0 0 0px 1000px rgba(10,18,40,0.95) inset;
+      box-shadow: 0 0 0px 1000px rgba(10,18,40,0.95) inset;
+      -webkit-text-fill-color: #f9fbff;
+      transition: background-color 5000s ease-in-out 0s;
+    }
+
+    input::selection {
+      background: rgba(77, 243, 163, 0.25);
+    }
+  </style>
+
+  <!-- Twilio Voice SDK v2 (UMD build exposes `Twilio.Device`) -->
+  <script src="https://cdn.jsdelivr.net/npm/@twilio/voice-sdk@2.15.0/dist/twilio.min.js"></script>
+</head>
+
+<body data-locked="true">
+  <div class="bubble b1"></div>
+  <div class="bubble b2"></div>
+  <div class="bubble b3"></div>
+  <div class="bubble b4"></div>
+  <div class="bubble b5"></div>
+  <div class="bubble b6"></div>
+
+  <div class="page-stack">
+    <div class="shell">
+    <!-- LEFT: Main dialer controls -->
+    <section class="card">
+      <div class="card-inner">
+        <div class="header-row">
+          <div class="title-block">
+            <h1>REHASH DIALER • REVCORE</h1>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+            <div class="agent-pill" id="agentPill">
+              <span class="agent-pill-dot"></span>
+              <div class="agent-pill-text">
+                <span id="agentLabel">Agent</span>
+                <span class="agent-status-label" id="agentStatusText">Offline</span>
+              </div>
+            </div>
+            <div class="agent-status-duration" id="agentStatusDuration">No recent dials</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="campaign-group">
+            <label>Assigned Campaign</label>
+            <div class="assigned-campaign-display" id="assignedCampaignDisplay">
+              Waiting for assignment…
+            </div>
+            <div class="assigned-campaign-note" id="assignedCampaignNote">
+              Your manager will assign one campaign per session.
+            </div>
+          </div>
+
+          <div class="controls-group">
+            <button id="btnStart" class="btn-primary">▶ Start Session</button>
+            <button id="btnPause" class="btn-neutral">⏸ Pause</button>
+            <button id="btnEnd" class="btn-danger">■ End Session</button>
+            <button id="btnManual" class="btn-neutral">☎ Manual Dial</button>
+          </div>
+        </div>
+
+        <div class="status-bar">
+          <div class="status-text" id="statusText">
+            Standing by. Waiting for campaign assignment.
+          </div>
+          <div class="status-chip paused" id="sessionChip">Paused</div>
+        </div>
+        <div class="call-utility-row">
+          <button id="btnMute" class="btn-ghost" disabled>Mute Mic</button>
+        </div>
+
+        <div class="current-lead" id="currentLeadBlock" style="opacity: 0.7;">
+          <div class="current-lead-title">Current Lead</div>
+          <div class="current-lead-main">
+            <div>
+              <strong id="leadName">No active call</strong><br/>
+              <span id="leadPhone" style="color: var(--text-subtle);"></span>
+            </div>
+            <div class="badge-live" id="callStateChip" style="display:none;">Dialing</div>
+          </div>
+          <div class="current-lead-meta">
+            <span class="tag-chip" id="leadCampaignTag">Campaign: —</span>
+            <span class="tag-chip">Local Presence: Active</span>
+          </div>
+        </div>
+        <div class="disposition-block" id="dispoBlock" style="display:none;">
+          <label class="note-label">
+            <span>Disposition</span>
+            <small>Required before next dial</small>
+          </label>
+          <div class="dispo-buttons">
+            <button class="btn-dispo" data-dispo="not_interested">Not Interested</button>
+            <button class="btn-dispo" data-dispo="callback_requested">Callback Requested</button>
+            <button class="btn-dispo" data-dispo="gatekeeper_transfer">Gatekeeper – Warm Transfer</button>
+            <button class="btn-dispo" data-dispo="wrong_contact">Wrong Contact</button>
+            <button class="btn-dispo" data-dispo="machine_voicemail">Machine / Voicemail</button>
+            <button class="btn-dispo" data-dispo="bad_number">Bad Number</button>
+            <button class="btn-dispo booked" data-dispo="booked">BOOKED Demo</button>
+          </div>
+
+          <label for="notes">
+            <span class="note-label">
+              <span>Notes (optional)</span>
+              <small>Pushed into CRM / recap</small>
+            </span>
+          </label>
+          <textarea id="notes" placeholder="Quick summary, objections, next steps…"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: Metrics, audio, leaderboard, activity -->
+    <aside class="side-column">
+      <section class="card metrics-card">
+        <div class="card-inner">
+          <div class="side-card-title">Today&apos;s Numbers</div>
+          <div class="duration-block">
+            <div class="duration-item">
+              <div class="duration-label">Avg Call Duration</div>
+              <div class="duration-value" id="m-avg-duration">0s</div>
+            </div>
+            <div class="duration-item">
+              <div class="duration-label">Last Call Duration</div>
+              <div class="duration-value" id="m-last-duration">0s</div>
+            </div>
+          </div>
+          <div class="goal-grid">
+            <div class="goal-card" id="goalLiveCard">
+              <div class="goal-label">Live Conversations</div>
+              <div class="goal-count" id="goalLiveCount">0 / 120</div>
+              <div class="goal-bar">
+                <div class="goal-bar-fill" id="goalLiveBar"></div>
+              </div>
+            </div>
+            <div class="goal-card" id="goalBookedCard">
+              <div class="goal-label">Booked Demos</div>
+              <div class="goal-count" id="goalBookedCount">0 / 4</div>
+              <div class="goal-bar">
+                <div class="goal-bar-fill" id="goalBookedBar"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card audio-card" id="audioCard">
+        <div class="card-inner">
+          <button class="collapsible-pill" id="audioToggle" type="button" aria-expanded="false">
+            <span>Audio &amp; Devices</span>
+            <span class="pill-chevron" aria-hidden="true">&#9662;</span>
+          </button>
+          <div class="audio-content" id="audioContent">
+            <div class="audio-select">
+              <label for="audioMicSelect">Microphone</label>
+              <select id="audioMicSelect" disabled>
+                <option value="">Grant microphone access…</option>
+              </select>
+            </div>
+            <div class="audio-select">
+              <label for="audioSpeakerSelect">Speaker / Output</label>
+              <select id="audioSpeakerSelect" disabled>
+                <option value="">Waiting for browser…</option>
+              </select>
+              <small id="speakerSupportNote">Use Chrome to route the dialer audio to a headset.</small>
+            </div>
+            <button class="audio-refresh-btn" id="audioRefreshBtn" type="button">↺ Refresh audio devices</button>
+            <div class="audio-note" id="audioStatusNote">Microphone + speaker must be ready before dialing.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card leaderboard-card">
+        <div class="card-inner">
+          <div class="leaderboard-header">
+            <span class="side-card-title" style="margin-bottom:0;">Mini Leaderboard</span>
+            <span class="leaderboard-rank" id="lbRank">Rank: —</span>
+          </div>
+          <ul class="leaderboard-list" id="lbList"></ul>
+        </div>
+      </section>
+
+      <section class="card activity-card">
+        <div class="card-inner">
+          <div class="side-card-title">Recent Activity</div>
+          <p style="margin: 4px 0 12px; color: var(--text-subtle); font-size: 0.78rem;">
+            Only final dispositions will show here.
+          </p>
+          <ul class="log-list" id="logList"></ul>
+        </div>
+      </section>
+    </aside>
+    </div>
+
+    <div class="stacked-sections">
+      <section class="card script-card">
+        <div class="card-inner">
+          <div class="script-block" id="scriptBlock">
+          <div class="script-header">
+            <div class="script-title">Call Script</div>
+            <button class="collapsible-pill script-pill" id="scriptToggle" type="button" aria-expanded="false">
+              <span>Open Script</span>
+              <span class="pill-chevron" aria-hidden="true">&#9662;</span>
+            </button>
+          </div>
+          <div class="script-content" id="scriptContent">
+            <div class="script-section">
+              <div class="script-heading">1. Opener – Confused Old-Man Tone</div>
+              <div class="script-body">
+                <p>“…yeah…<br>is this {Name}?<br>Oh hey, {Name}, it’s just Hayden…<br>I was wondering if you could possibly… help me out for a moment?”</p>
+                <p>What they say:<br>“Sure, how can I help you?” / “Who is this?” / “What’s this about?”</p>
+              </div>
+            </div>
+            <div class="script-section">
+              <div class="script-heading">2. Responsibility Pattern Interrupt</div>
+              <div class="script-body">
+                <p>“Well… and I’m not quite sure if you’re the right person I should be talking to…<br>but I called to see who would be responsible on your end for looking at any possible hidden gaps in your older leads and unsold estimates…<br>that could be causing you guys to miss out on jobs you already quoted…”</p>
+                <p>Pause, then:<br>“…who should I be talking to about that?”</p>
+              </div>
+            </div>
+            <div class="script-section">
+              <div class="script-heading">3. Gatekeeper Responses</div>
+              <div class="script-body">
+                <p>If they say “What do you mean hidden gaps?”<br>“Yeah, I’m just referring to any possible gaps in the follow-up rhythm…<br>that could be causing some of those estimates to go cold even though they were good jobs.”<br>Then: “Who would usually handle that over there?”</p>
+                <p>If they say “That’d be {Owner/Manager}.”<br>“Got it…<br>should I have you transfer me over to them…<br>just to leave a quick voicemail and they can call me back if they need help with that?”</p>
+                <p>If they ask “Do you have an appointment?”<br>“Ah… I don’t think so…<br>I was just trying to reach whoever’s responsible for those older leads so I know who to talk to.”</p>
+              </div>
+            </div>
+            <div class="script-section">
+              <div class="script-heading">4. If You Reach the Decision-Maker</div>
+              <div class="script-body">
+                <p>“Yeah, so I wasn’t even sure if it really makes sense for us to talk yet…<br>but I called to see who’s responsible for identifying any possible hidden gaps in your old leads and past estimates…<br>that could be causing you guys to lose out on work you’ve already quoted.”</p>
+                <p>Pause. Let them respond.</p>
+              </div>
+            </div>
+            <div class="script-section">
+              <div class="script-heading">5. Once They Lean In (Curiosity Triggered)</div>
+              <div class="script-body">
+                <p>If they say “What do you mean by hidden gaps?” or “Yeah that might be me, what’s going on?”<br>“Yeah… not saying you guys have anything wrong…<br>just that a lot of contractors notice they’ve got some older estimates that never got followed up on…<br>and that can lead to a few jobs slipping through the cracks.”<br>Then: “Would you be opposed to a brief conversation… maybe 10–15 minutes… just to see if anything could be tightened up?”</p>
+              </div>
+            </div>
+            <div class="script-section">
+              <div class="script-heading">6. If They Push Back</div>
+              <div class="script-body">
+                <p>“Totally fair…<br>and I’m not even sure if it makes sense for us to talk long-term…<br>but most contractors we speak with end up finding something in the older leads they didn’t realize was there.”<br>Then: “Would you be opposed to a quick look at it?”</p>
+              </div>
+            </div>
+            <div class="script-section">
+              <div class="script-heading">7. If They Still Resist</div>
+              <div class="script-body">
+                <p>“Yeah, I get that…<br>who would be the best person to loop in if you ever wanted to take a look at those older estimates again?”</p>
+              </div>
+            </div>
+            <div class="script-section">
+              <div class="script-heading">Voicemail – Version 1</div>
+              <div class="script-body">
+                <p>“Hey [Name]… this is [Your Name] with Rehash Engine.<br>I’m looking over some of your older leads and past estimates…<br>and I had a quick question on those…<br>and I was wondering if you could help me out for a moment.</p>
+                <p>I’m going to be available for a little bit today…<br>you can reach me at [your number].<br>And if you don’t catch me, just leave a message<br>and I’ll call you back as soon as I’m free.<br>Talk to you then.”</p>
+              </div>
+            </div>
+            <div class="script-section">
+              <div class="script-heading">Voicemail – Version 2</div>
+              <div class="script-body">
+                <p>“Hey [Name]… yeah… it’s just [Your Name] with Rehash Engine.<br>Looks like you had responded to something online…<br>I think it was yesterday morning…<br>about getting a little outside help with tightening up your older leads<br>and the past estimates you guys already quoted.</p>
+                <p>I just had time to get back to you…<br>to see if I could actually help with that.</p>
+                <p>I should be available here for a little bit today…<br>you can reach me at [your number].<br>And if you don’t get me, just leave a quick message…<br>or you’re welcome to text that number too…<br>and I’ll text you a time that I can call you back. Talk to you then.”</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div>
+      <div class="calendar-title">Book a Demo</div>
+      <iframe src="https://api.leadconnectorhq.com/widget/booking/NV47jMb2Se8WlgRuKuA5" class="calendar-frame" scrolling="no" id="NV47jMb2Se8WlgRuKuA5_1763294635003"></iframe>
+      <script src="https://link.msgsndr.com/js/form_embed.js" type="text/javascript"></script>
+      <p style="margin: 10px 0 0; color: var(--text-subtle); font-size: 0.85rem;">
+        Please verify that the selected time zone reflects the prospect’s state prior to scheduling.
+      </p>
+    </div>
+    </div>
+  </div>
+
+  <div class="incoming-modal" id="incomingModal">
+    <div class="incoming-card">
+      <div class="incoming-priority">High Priority</div>
+      <div class="incoming-title">Incoming Call</div>
+      <div class="incoming-meta" id="incomingMeta">Unknown caller</div>
+      <div class="incoming-actions">
+        <button class="btn btn-neutral" id="incomingMuteBtn">Mute</button>
+        <button class="btn btn-secondary" id="incomingRejectBtn">Reject</button>
+        <button class="btn btn-primary" id="incomingAcceptBtn">Accept</button>
+        <button class="btn btn-danger" id="incomingEndBtn">End</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN DIALER + TWILIO LOGIC -->
+  <script>
+    console.log('[Dialer] Main script loaded');
+
+    // will be set from /login or /me
+    let agentId = null;
+
+    const DAILY_GOAL_LIVE = 120;
+    const DAILY_GOAL_BOOKED = 4;
+
+    let sessionState = 'paused';
+    let hasPendingDispo = false;
+    let currentLead = null;
+    let currentCampaignId = null;
+    let assignedCampaignId = null;
+    let assignedCampaignName = '';
+    let logs = [];
+    let availableMics = [];
+    let availableSpeakers = [];
+    let pendingMicDeviceId = 'default';
+    let pendingSpeakerDeviceId = 'default';
+    let recordedLiveConnect = false;
+    let isMuted = false;
+    let twilioDevice = null;
+    let activeConnection = null;
+    let twilioRegistered = false;
+    let audioReady = false;
+    let audioAccessPromise = null;
+    let voiceSetupPromise = null;
+    let pendingManualPhone = null;
+    let pendingIncomingCall = null;
+
+    function showIncomingModal() {
+      if (incomingModal) {
+        incomingModal.style.display = 'flex';
+        incomingModal.style.opacity = 1;
+        incomingModal.style.pointerEvents = 'auto';
+      }
+    }
+
+    function hideIncomingModal() {
+      if (incomingModal) {
+        incomingModal.style.display = 'none';
+      }
+    }
+
+    const statusTextEl        = document.getElementById('statusText');
+    const sessionChipEl       = document.getElementById('sessionChip');
+    const leadNameEl          = document.getElementById('leadName');
+    const leadPhoneEl         = document.getElementById('leadPhone');
+    const leadCampaignTagEl   = document.getElementById('leadCampaignTag');
+    const currentLeadBlockEl  = document.getElementById('currentLeadBlock');
+    const callStateChipEl     = document.getElementById('callStateChip');
+    const dispoBlockEl        = document.getElementById('dispoBlock');
+    const notesEl             = document.getElementById('notes');
+    const logListEl           = document.getElementById('logList');
+    const btnStart            = document.getElementById('btnStart');
+    const btnPause            = document.getElementById('btnPause');
+    const btnEnd              = document.getElementById('btnEnd');
+    const btnManual           = document.getElementById('btnManual');
+    const btnMute             = document.getElementById('btnMute');
+    const lbRankEl            = document.getElementById('lbRank');
+    const lbListEl            = document.getElementById('lbList');
+    const agentLabelEl        = document.getElementById('agentLabel');
+    const agentStatusTextEl   = document.getElementById('agentStatusText');
+    const agentStatusDurationEl = document.getElementById('agentStatusDuration');
+    const agentPillEl         = document.getElementById('agentPill');
+    const assignedCampaignDisplayEl = document.getElementById('assignedCampaignDisplay');
+    const assignedCampaignNoteEl = document.getElementById('assignedCampaignNote');
+    const avgDurationEl       = document.getElementById('m-avg-duration');
+    const lastDurationEl      = document.getElementById('m-last-duration');
+    const goalLiveCountEl     = document.getElementById('goalLiveCount');
+    const goalLiveBarEl       = document.getElementById('goalLiveBar');
+    const goalBookedCountEl   = document.getElementById('goalBookedCount');
+    const goalBookedBarEl     = document.getElementById('goalBookedBar');
+    const goalLiveCard        = document.getElementById('goalLiveCard');
+    const goalBookedCard      = document.getElementById('goalBookedCard');
+    const scriptBlockEl       = document.getElementById('scriptBlock');
+    const scriptToggleEl      = document.getElementById('scriptToggle');
+    const scriptContentEl     = document.getElementById('scriptContent');
+    const audioCardEl         = document.getElementById('audioCard');
+    const audioToggleEl       = document.getElementById('audioToggle');
+    const audioContentEl      = document.getElementById('audioContent');
+    const micSelectEl         = document.getElementById('audioMicSelect');
+    const speakerSelectEl     = document.getElementById('audioSpeakerSelect');
+    const audioRefreshBtn     = document.getElementById('audioRefreshBtn');
+    const audioStatusNoteEl   = document.getElementById('audioStatusNote');
+    const speakerSupportNoteEl = document.getElementById('speakerSupportNote');
+    const incomingModal       = document.getElementById('incomingModal');
+    const incomingMetaEl      = document.getElementById('incomingMeta');
+    const incomingAcceptBtn   = document.getElementById('incomingAcceptBtn');
+    const incomingRejectBtn   = document.getElementById('incomingRejectBtn');
+    const incomingMuteBtn     = document.getElementById('incomingMuteBtn');
+    const incomingEndBtn      = document.getElementById('incomingEndBtn');
+    const canRequestSpeakerSelection =
+      typeof document.createElement === 'function' &&
+      typeof document.createElement('audio').setSinkId === 'function';
+    const DISPOSITION_LABELS = {
+      not_interested: 'Not Interested',
+      callback_requested: 'Callback Requested',
+      gatekeeper_transfer: 'Gatekeeper – Warm Transfer',
+      wrong_contact: 'Wrong Contact',
+      machine_voicemail: 'Machine / Voicemail',
+      bad_number: 'Bad Number',
+      booked: 'Booked Demo'
+    };
+
+    function setAgentLabel(label) {
+      agentLabelEl.textContent = `Agent • ${label}`;
+    }
+
+    function setAssignedCampaign(id, name) {
+      assignedCampaignId = id || null;
+      assignedCampaignName = name || '';
+      currentCampaignId = assignedCampaignId;
+      if (assignedCampaignDisplayEl) {
+        if (assignedCampaignId) {
+          assignedCampaignDisplayEl.textContent = assignedCampaignName || assignedCampaignId;
+          assignedCampaignDisplayEl.classList.remove('unassigned');
+          if (assignedCampaignNoteEl) {
+            assignedCampaignNoteEl.textContent = 'All dials will use this campaign.';
+          }
+        } else {
+          assignedCampaignDisplayEl.textContent = 'No campaign assigned.';
+          assignedCampaignDisplayEl.classList.add('unassigned');
+          if (assignedCampaignNoteEl) {
+            assignedCampaignNoteEl.textContent = 'Ask your admin to assign a campaign.';
+          }
+        }
+      }
+      updateCampaignControls();
+      if (assignedCampaignId && statusTextEl) {
+        statusTextEl.textContent = `Campaign locked: ${assignedCampaignName || assignedCampaignId}. Hit Start Session to begin dialing.`;
+      }
+    }
+
+    function updateCampaignControls() {
+      const hasCampaign = Boolean(assignedCampaignId);
+      [btnStart, btnPause, btnEnd].forEach(btn => {
+        if (btn) btn.disabled = !hasCampaign;
+      });
+      if (!hasCampaign) {
+        statusTextEl.textContent = 'No campaign assigned. Contact admin.';
+      }
+    }
+
+    function setSessionState(state) {
+      sessionState = state;
+      sessionChipEl.classList.remove('running', 'paused', 'ended');
+      if (state === 'running') {
+        sessionChipEl.textContent = 'Running';
+        sessionChipEl.classList.add('running');
+      } else if (state === 'paused') {
+        sessionChipEl.textContent = 'Paused';
+        sessionChipEl.classList.add('paused');
+      } else {
+        sessionChipEl.textContent = 'Ended';
+        sessionChipEl.classList.add('ended');
+      }
+    }
+
+    function formatDuration(seconds) {
+      const s = Math.max(0, Math.round(Number(seconds) || 0));
+      if (s < 60) return `${s}s`;
+      const mins = Math.floor(s / 60);
+      const rem = s % 60;
+      if (!rem) return `${mins}m`;
+      return `${mins}m ${rem}s`;
+    }
+
+    function formatRelativeDuration(seconds) {
+      if (seconds == null || Number.isNaN(seconds)) return 'No recent dials';
+      const s = Math.max(0, Math.round(Number(seconds)));
+      if (s < 60) return `${s}s`;
+      if (s < 3600) return `${Math.floor(s / 60)}m`;
+      const hours = Math.floor(s / 3600);
+      const minutes = Math.floor((s % 3600) / 60);
+      if (!minutes) return `${hours}h`;
+      return `${hours}h ${minutes}m`;
+    }
+
+    function updateAgentStatus(status, durationSec) {
+      if (!agentStatusTextEl) return;
+      const normalized = (status || 'offline').toLowerCase();
+      agentStatusTextEl.classList.remove('online', 'away', 'offline');
+      if (agentPillEl) {
+        agentPillEl.classList.remove('status-online', 'status-away', 'status-offline');
+      }
+
+      if (normalized === 'online') {
+        agentStatusTextEl.textContent = 'Online';
+        agentStatusTextEl.classList.add('online');
+        if (agentPillEl) agentPillEl.classList.add('status-online');
+        if (agentStatusDurationEl) agentStatusDurationEl.textContent = 'Live now';
+      } else if (normalized === 'away') {
+        agentStatusTextEl.textContent = 'Away';
+        agentStatusTextEl.classList.add('away');
+        if (agentPillEl) agentPillEl.classList.add('status-away');
+        if (agentStatusDurationEl) agentStatusDurationEl.textContent = `Away for ${formatRelativeDuration(durationSec)}`;
+      } else {
+        agentStatusTextEl.textContent = 'Offline';
+        agentStatusTextEl.classList.add('offline');
+        if (agentPillEl) agentPillEl.classList.add('status-offline');
+        if (agentStatusDurationEl) agentStatusDurationEl.textContent = `Offline for ${formatRelativeDuration(durationSec)}`;
+      }
+    }
+
+    function setAudioStatus(text) {
+      if (audioStatusNoteEl) {
+        audioStatusNoteEl.textContent = text || '';
+      }
+    }
+
+    function syncSpeakerSupportUi(isSupported) {
+      if (!speakerSelectEl) return;
+      speakerSelectEl.disabled = !isSupported;
+      if (speakerSupportNoteEl) {
+        speakerSupportNoteEl.textContent = isSupported
+          ? 'Route the dialer audio to your preferred headset or speaker.'
+          : 'Your browser will use the system default speaker (no switching available).';
+      }
+    }
+
+    function updateMuteButton() {
+      if (!btnMute) return;
+      btnMute.disabled = !activeConnection;
+      btnMute.textContent = isMuted ? 'Unmute Mic' : 'Mute Mic';
+      btnMute.classList.toggle('muted', isMuted);
+    }
+
+    function setMuteState(nextState) {
+      isMuted = Boolean(nextState);
+      if (activeConnection && typeof activeConnection.mute === 'function') {
+        activeConnection.mute(isMuted);
+      }
+      updateMuteButton();
+    }
+
+    function updateGoalProgress(count, goal, countEl, barEl, cardEl) {
+      if (countEl) {
+        countEl.textContent = `${count} / ${goal}`;
+      }
+      if (barEl) {
+        const pct = Math.min(100, Math.round((count / goal) * 100));
+        barEl.style.width = `${pct}%`;
+      }
+      if (cardEl) {
+        cardEl.classList.toggle('goal-complete', count >= goal);
+      }
+    }
+
+    function updateGoals(liveCount, bookedCount) {
+      updateGoalProgress(liveCount, DAILY_GOAL_LIVE, goalLiveCountEl, goalLiveBarEl, goalLiveCard);
+      updateGoalProgress(bookedCount, DAILY_GOAL_BOOKED, goalBookedCountEl, goalBookedBarEl, goalBookedCard);
+    }
+
+    function triggerBookedCelebration() {
+      if (!goalBookedCard) return;
+      goalBookedCard.classList.add('celebrate');
+      setTimeout(() => goalBookedCard.classList.remove('celebrate'), 700);
+    }
+
+    function getDeviceLabel(kind, deviceId) {
+      if (!deviceId || deviceId === 'default') return 'System default';
+      const list = kind === 'mic' ? availableMics : availableSpeakers;
+      const found = list.find(d => d.deviceId === deviceId);
+      return found ? (found.label || 'Audio device') : 'Audio device';
+    }
+
+    function renderAudioDeviceOptions() {
+      if (micSelectEl) {
+        micSelectEl.innerHTML = '';
+        const defaultMic = document.createElement('option');
+        defaultMic.value = 'default';
+        defaultMic.textContent = 'System default';
+        micSelectEl.appendChild(defaultMic);
+        availableMics.forEach((device, idx) => {
+          const opt = document.createElement('option');
+          opt.value = device.deviceId;
+          opt.textContent = device.label || `Microphone ${idx + 1}`;
+          micSelectEl.appendChild(opt);
+        });
+        micSelectEl.disabled = false;
+        micSelectEl.value = pendingMicDeviceId || 'default';
+        if (micSelectEl.value !== pendingMicDeviceId) {
+          micSelectEl.value = 'default';
+          pendingMicDeviceId = 'default';
+        }
+      }
+
+      if (speakerSelectEl) {
+        speakerSelectEl.innerHTML = '';
+        const defaultSpeaker = document.createElement('option');
+        defaultSpeaker.value = 'default';
+        defaultSpeaker.textContent = 'System default';
+        speakerSelectEl.appendChild(defaultSpeaker);
+        availableSpeakers.forEach((device, idx) => {
+          const opt = document.createElement('option');
+          opt.value = device.deviceId;
+          opt.textContent = device.label || `Speaker ${idx + 1}`;
+          speakerSelectEl.appendChild(opt);
+        });
+        speakerSelectEl.value = pendingSpeakerDeviceId || 'default';
+        if (speakerSelectEl.value !== pendingSpeakerDeviceId) {
+          speakerSelectEl.value = 'default';
+          pendingSpeakerDeviceId = 'default';
+        }
+      }
+    }
+
+    async function refreshAudioDeviceLists(userRequested = false) {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        setAudioStatus('Browser cannot enumerate audio devices.');
+        return;
+      }
+      if (userRequested) {
+        setAudioStatus('Refreshing audio devices…');
+      }
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        availableMics = devices.filter(d => d.kind === 'audioinput');
+        availableSpeakers = devices.filter(d => d.kind === 'audiooutput');
+        renderAudioDeviceOptions();
+        const hasDevices = availableMics.length + availableSpeakers.length > 0;
+        setAudioStatus(
+          hasDevices
+            ? 'Audio devices synced. Confirm your selections before dialing.'
+            : 'No audio devices detected. Check your headset/cables.'
+        );
+      } catch (err) {
+        console.error('Unable to enumerate devices', err);
+        setAudioStatus('Unable to list audio devices. Check browser permissions.');
+      }
+    }
+
+    async function applyMicSelection(deviceId) {
+      pendingMicDeviceId = deviceId || 'default';
+      if (!twilioDevice || !twilioDevice.audio) {
+        setAudioStatus('Softphone is still loading. Your mic selection will be applied when ready.');
+        return;
+      }
+      try {
+        await twilioDevice.audio.microphoneDevices.set(pendingMicDeviceId);
+        setAudioStatus(`Mic routed to ${getDeviceLabel('mic', pendingMicDeviceId)}.`);
+      } catch (err) {
+        console.error('Unable to switch microphone', err);
+        setAudioStatus('Unable to switch microphone. Try refreshing devices.');
+      }
+    }
+
+    async function applySpeakerSelection(deviceId) {
+      pendingSpeakerDeviceId = deviceId || 'default';
+      if (!twilioDevice || !twilioDevice.audio || !twilioDevice.audio.isOutputSelectionSupported) {
+        if (!canRequestSpeakerSelection) {
+          setAudioStatus('Browser will use the system speaker (no switching supported).');
+        } else {
+          setAudioStatus('Softphone is still loading. Speaker selection will apply once ready.');
+        }
+        return;
+      }
+      try {
+        const ids = pendingSpeakerDeviceId === 'default'
+          ? ['default']
+          : [pendingSpeakerDeviceId];
+        await twilioDevice.audio.speakerDevices.set(ids);
+        setAudioStatus(`Speaker routed to ${getDeviceLabel('speaker', pendingSpeakerDeviceId)}.`);
+      } catch (err) {
+        console.error('Unable to switch speaker', err);
+        setAudioStatus('Unable to switch speaker. Browser may be blocking this feature.');
+      }
+    }
+
+    syncSpeakerSupportUi(Boolean(canRequestSpeakerSelection));
+
+    function pushLog(message, badge, kind = 'misc') {
+      const entry = { ts: new Date(), message, badge, kind };
+      logs.unshift(entry);
+      if (logs.length > 50) logs.pop();
+      renderLogs();
+    }
+
+    function renderLogs() {
+      if (!logListEl) return;
+      const finalLogs = logs.filter(item => item.kind === 'final').slice(0, 12);
+      if (!finalLogs.length) {
+        logListEl.innerHTML = `<li class="log-item log-empty">No dispositions yet.</li>`;
+        return;
+      }
+      logListEl.innerHTML = finalLogs.map(item => {
+        const time = item.ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return `
+          <li class="log-item">
+            <div class="log-left">
+              <div>${item.message}</div>
+              <div style="font-size:0.7rem; color:#6b7280;">${time}</div>
+            </div>
+          </li>
+        `;
+      }).join('');
+    }
+
+    function bumpCallState(text) {
+      if (!text) {
+        callStateChipEl.style.display = 'none';
+        return;
+      }
+      callStateChipEl.style.display = 'inline-flex';
+      callStateChipEl.textContent = text;
+    }
+
+    function setCurrentLead(lead) {
+      currentLead = lead;
+      recordedLiveConnect = false;
+      if (!lead) {
+        leadNameEl.textContent = 'No active call';
+        leadPhoneEl.textContent = '';
+        leadCampaignTagEl.textContent = 'Campaign: —';
+        currentLeadBlockEl.style.opacity = 0.7;
+        bumpCallState('');
+        dispoBlockEl.style.display = 'none';
+        hasPendingDispo = false;
+        notesEl.value = '';
+        btnEnd.disabled = false;
+        return;
+      }
+      currentLeadBlockEl.style.opacity = 1;
+      leadNameEl.textContent = lead.name || 'Lead';
+      leadPhoneEl.textContent = lead.phone || '';
+      leadCampaignTagEl.textContent = `Campaign: ${lead.campaignName || assignedCampaignName || '—'}`;
+      bumpCallState('Dialing');
+      dispoBlockEl.style.display = 'block';
+      hasPendingDispo = true;
+      notesEl.value = '';
+      btnEnd.disabled = true; // lock session end during an active call
+    }
+
+    async function fetchMetrics() {
+      if (!agentId) return;
+      try {
+        const res = await fetch(`/api/metrics/${encodeURIComponent(agentId)}`);
+        const data = await res.json();
+        const m = data.metrics || {};
+        if (avgDurationEl) {
+          avgDurationEl.textContent = formatDuration(m.avgCallDurationSec || 0);
+        }
+        if (lastDurationEl) {
+          lastDurationEl.textContent = formatDuration(m.lastCallDurationSec || 0);
+        }
+        updateGoals(m.answeredHuman || 0, m.conversions || 0);
+        updateAgentStatus(m.status, m.statusDurationSec);
+      } catch (e) {
+        console.error('metrics error', e);
+      }
+    }
+
+    async function fetchLeaderboard() {
+      if (!agentId) return;
+      try {
+        const res = await fetch(`/api/leaderboard?agentId=${encodeURIComponent(agentId)}`);
+        const data = await res.json();
+        const { me, top } = data;
+
+        if (me && me.rank) {
+          lbRankEl.textContent = `Rank: ${me.rank}`;
+        } else {
+          lbRankEl.textContent = 'Rank: —';
+        }
+
+        lbListEl.innerHTML = (top || []).map(row => {
+          const label = row.agentId === agentId ? 'You' : `Agent ${row.agentId}`;
+          return `
+            <li class="leaderboard-item">
+              <div class="leaderboard-left">
+                <strong>${label}</strong><br/>
+                <span>${row.conversions || 0} booked • ${row.live || 0} live</span>
+              </div>
+              <div class="leaderboard-right">#${row.rank || '—'}</div>
+            </li>
+          `;
+        }).join('');
+      } catch (e) {
+        console.error('leaderboard error', e);
+      }
+    }
+
+    async function requestNextCall() {
+      if (!agentId) {
+        statusTextEl.innerHTML = 'Please <span>log in</span> before dialing.';
+        return;
+      }
+      if (sessionState !== 'running') {
+        statusTextEl.innerHTML = 'Session is <span>paused</span>. Hit Start Session to resume.';
+        return;
+      }
+      if (!assignedCampaignId) {
+        statusTextEl.innerHTML = 'No <span>campaign</span> assigned. Please contact your admin.';
+        return;
+      }
+      if (hasPendingDispo) {
+        statusTextEl.innerHTML = 'Please add a <span>disposition</span> before dialing again.';
+        return;
+      }
+      if (activeConnection) {
+        statusTextEl.innerHTML = 'Finish the current <span>live call</span> before dialing again.';
+        return;
+      }
+      try {
+        await ensureAudioAccess();
+      } catch (err) {
+        statusTextEl.innerHTML = 'Please allow <span>microphone</span> access to continue.';
+        return;
+      }
+      if (!twilioRegistered) {
+        statusTextEl.innerHTML = 'Softphone is still <span>connecting</span>. Try again in a moment.';
+        return;
+      }
+
+      currentCampaignId = assignedCampaignId;
+      const campaignName = assignedCampaignName || 'Campaign';
+
+      statusTextEl.textContent = 'Pulling next lead…';
+
+      try {
+        const res = await fetch('/api/dialer/next', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ campaignId: currentCampaignId })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          statusTextEl.textContent = data.error || 'No leads available for this campaign.';
+          setCurrentLead(null);
+          bumpCallState('');
+          return;
+        }
+
+        const lead = data.lead || {};
+        lead.campaignName = campaignName;
+        setCurrentLead(lead);
+        statusTextEl.innerHTML = `Dialing <span>${lead.name}</span> at <span>${lead.phone}</span>…`;
+        pushLog(`Dialing ${lead.name || 'Lead'} • ${lead.phone || ''}`, 'CALL');
+        fetchMetrics();
+        fetchLeaderboard();
+
+      } catch (e) {
+        console.error('dial error', e);
+        statusTextEl.textContent = 'Error starting call.';
+        setCurrentLead(null);
+      }
+    }
+
+   async function sendDisposition(outcome) {
+     if (!agentId) {
+       statusTextEl.textContent = 'No agent ID — please re-login.';
+       return;
+     }
+     if (!currentLead || !hasPendingDispo) return;
+
+     const notes      = notesEl.value || '';
+     const leadPhone  = currentLead.phone;
+     const leadName   = currentLead.name || '';
+     const campaignId = currentCampaignId || assignedCampaignId;
+
+     const friendlyLabel = DISPOSITION_LABELS[outcome] || outcome;
+     statusTextEl.textContent = `Saving disposition: ${friendlyLabel}…`;
+
+     try {
+       await fetch('/api/disposition', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+           agentId,
+           campaignId,
+           outcome,
+           notes,
+           leadPhone,
+           leadName
+         })
+       });
+
+       hasPendingDispo = false;
+       bumpCallState('');
+       statusTextEl.textContent = `Disposition recorded: ${friendlyLabel}.`;
+       pushLog(`${friendlyLabel} • ${leadName} • ${leadPhone}`, friendlyLabel, 'final');
+       if (outcome === 'booked') {
+         triggerBookedCelebration();
+       }
+       fetchMetrics();
+       fetchLeaderboard();
+       setCurrentLead(null);
+
+       if (sessionState === 'running') {
+         setTimeout(requestNextCall, 400);
+       }
+     } catch (e) {
+       console.error('dispo error', e);
+       statusTextEl.textContent = 'Error saving disposition.';
+     }
+   }
+
+    btnStart.addEventListener('click', () => {
+      if (!assignedCampaignId) {
+        statusTextEl.innerHTML = 'No <span>campaign</span> assigned. Please contact your admin.';
+        return;
+      }
+      setSessionState('running');
+      statusTextEl.innerHTML = 'Session <span>running</span>. Pulling first lead…';
+      requestNextCall();
+    });
+
+    btnPause.addEventListener('click', () => {
+      setSessionState('paused');
+      statusTextEl.innerHTML = 'Session <span>paused</span>. No new dials until you hit Start.';
+    });
+
+    btnEnd.addEventListener('click', () => {
+      setSessionState('ended');
+      statusTextEl.innerHTML = 'Session <span>ended</span>. Wrap notes and close out.';
+      setCurrentLead(null);
+      btnEnd.disabled = false;
+    });
+
+    document.querySelectorAll('.btn-dispo').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const outcome = btn.getAttribute('data-dispo');
+        sendDisposition(outcome);
+      });
+    });
+
+    // Dedicated hangup button for the active call (does not end session)
+    const hangupBtn = document.createElement('button');
+    hangupBtn.id = 'btnHangup';
+    hangupBtn.className = 'btn-secondary';
+    hangupBtn.textContent = 'End Call';
+    hangupBtn.style.marginLeft = '8px';
+    hangupBtn.addEventListener('click', () => {
+      fetch('/api/agent/hangup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      }).catch(() => {});
+    });
+    const startPauseRow = btnStart?.parentElement;
+    if (startPauseRow) {
+      startPauseRow.appendChild(hangupBtn);
+    }
+
+    // Manual dial modal
+    let manualModal = document.createElement('div');
+    manualModal.id = 'manualModal';
+    manualModal.style.cssText = `
+      position: fixed; inset:0; display:none; align-items:center; justify-content:center;
+      background: rgba(0,0,0,0.65); z-index:9999;
+    `;
+    manualModal.innerHTML = `
+      <div style="width: 360px; background: rgba(8,12,24,0.96); border:1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 18px 16px; box-shadow: 0 18px 60px rgba(0,0,0,0.55);">
+        <div style="font-size:16px; font-weight:700; margin-bottom:10px; color:#e5e7eb;">Manual Dial</div>
+        <label style="font-size:12px; color:#9ca3af;">Number</label>
+        <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+          <span style="color:#9ca3af;">+1</span>
+          <input id="manualNumber" placeholder="Enter 10-digit number" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width:100%; padding:8px; background:rgba(255,255,255,0.06); color:#e5e7eb; border:1px solid rgba(255,255,255,0.12); outline:none;" />
+        </div>
+        <label style="font-size:12px; color:#9ca3af;">Caller ID</label>
+        <select id="manualCallerId" style="width:100%; margin-bottom:8px; padding:8px;"></select>
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+          <button id="manualCancel" type="button" class="btn-neutral">Cancel</button>
+          <button id="manualCall" type="button" class="btn-primary">Call</button>
+        </div>
+        <div id="manualStatus" style="margin-top:8px; font-size:12px; color:#9ca3af;"></div>
+      </div>
+    `;
+    document.body.appendChild(manualModal);
+    console.log('[Dialer] Manual modal attached to DOM');
+
+    function populateCallerIdOptions() {
+      const select = document.getElementById('manualCallerId');
+      if (!select) return;
+      select.innerHTML = '';
+      const slots = (window.agentSlots || window.agentSlotMap || {});
+      const values = Object.values(slots);
+      if (values.length) {
+        values.forEach(slot => {
+          const opt = document.createElement('option');
+          opt.value = slot.dialTarget;
+          opt.textContent = `${slot.name} (${slot.dialTarget})`;
+          select.appendChild(opt);
+        });
+        select.selectedIndex = 0;
+      } else {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'Auto (local presence)';
+        select.appendChild(opt);
+        select.selectedIndex = 0;
+      }
+    }
+
+    function openManualModal() {
+      populateCallerIdOptions();
+      if (manualModal) {
+        manualModal.style.display = 'flex';
+        manualModal.style.opacity = 1;
+        manualModal.style.pointerEvents = 'auto';
+      } else {
+        console.error('[Dialer] manualModal missing in DOM');
+      }
+      const status = document.getElementById('manualStatus');
+      if (status) status.textContent = '';
+      console.log('[Dialer] Manual dial modal opened');
+    }
+
+    function closeManualModal() {
+      if (manualModal) manualModal.style.display = 'none';
+    }
+
+
+    async function handleManualCall() {
+      const number = '+1' + document.getElementById('manualNumber').value.replace(/[^\d]/g, '').replace(/^1/, '');
+      const caller = document.getElementById('manualCallerId').value.trim();
+      const status = document.getElementById('manualStatus');
+      if (status) status.textContent = 'Dialing…';
+      pendingManualPhone = number;
+      try {
+        const res = await fetch('/api/manual-dial', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            toNumber: number,
+            callerId: caller,
+            campaignId: assignedCampaignId
+          })
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          if (status) status.textContent = data.error || 'Failed to start call.';
+        } else {
+          closeManualModal();
+          statusTextEl.textContent = 'Manual call started.';
+        }
+      } catch (err) {
+        if (status) status.textContent = 'Error starting manual call.';
+      }
+    }
+
+    if (btnManual) {
+      btnManual.addEventListener('click', () => {
+        console.log('[Dialer] Manual Dial button clicked');
+        if (activeConnection) {
+          statusTextEl.textContent = 'Hang up current call before manual dialing.';
+          return;
+        }
+        openManualModal();
+      });
+    }
+    document.getElementById('manualCancel')?.addEventListener('click', closeManualModal);
+    document.getElementById('manualCall')?.addEventListener('click', handleManualCall);
+
+    if (btnMute) {
+      btnMute.addEventListener('click', () => {
+        if (!activeConnection) return;
+        setMuteState(!isMuted);
+      });
+    }
+
+    if (micSelectEl) {
+      micSelectEl.addEventListener('change', e => {
+        applyMicSelection(e.target.value);
+      });
+    }
+
+    if (speakerSelectEl) {
+      speakerSelectEl.addEventListener('change', e => {
+        applySpeakerSelection(e.target.value);
+      });
+    }
+
+    if (incomingAcceptBtn) {
+      incomingAcceptBtn.addEventListener('click', () => {
+        if (pendingIncomingCall) {
+          pendingIncomingCall.accept();
+        }
+      });
+    }
+
+    if (incomingRejectBtn) {
+      incomingRejectBtn.addEventListener('click', () => {
+        if (pendingIncomingCall) {
+          pendingIncomingCall.reject();
+        }
+        hideIncomingModal();
+      });
+    }
+
+    if (incomingMuteBtn) {
+      incomingMuteBtn.addEventListener('click', () => {
+        if (!pendingIncomingCall && !activeConnection) return;
+        setMuteState(!isMuted);
+      });
+    }
+
+    if (incomingEndBtn) {
+      incomingEndBtn.addEventListener('click', () => {
+        if (pendingIncomingCall) {
+          pendingIncomingCall.reject();
+        }
+        if (activeConnection) {
+          activeConnection.disconnect();
+        }
+        hideIncomingModal();
+        pendingIncomingCall = null;
+      });
+    }
+
+    if (scriptBlockEl && scriptToggleEl && scriptContentEl) {
+      const setScriptExpanded = (open) => {
+        scriptToggleEl.setAttribute('aria-expanded', open ? 'true' : 'false');
+        scriptBlockEl.classList.toggle('expanded', open);
+      };
+      setScriptExpanded(false);
+      scriptToggleEl.addEventListener('click', () => {
+        const isOpen = scriptToggleEl.getAttribute('aria-expanded') === 'true';
+        setScriptExpanded(!isOpen);
+      });
+    }
+
+    if (audioToggleEl && audioContentEl && audioCardEl) {
+      const setAudioExpanded = (open) => {
+        audioToggleEl.setAttribute('aria-expanded', open ? 'true' : 'false');
+        audioCardEl.classList.toggle('expanded', open);
+      };
+      setAudioExpanded(false);
+      audioToggleEl.addEventListener('click', () => {
+        const isOpen = audioToggleEl.getAttribute('aria-expanded') === 'true';
+        setAudioExpanded(!isOpen);
+      });
+    }
+
+    if (audioRefreshBtn) {
+      audioRefreshBtn.addEventListener('click', () => {
+        refreshAudioDeviceLists(true);
+      });
+    }
+
+    if (navigator.mediaDevices) {
+      if (navigator.mediaDevices.addEventListener) {
+        navigator.mediaDevices.addEventListener('devicechange', () => refreshAudioDeviceLists());
+      } else if ('ondevicechange' in navigator.mediaDevices) {
+        navigator.mediaDevices.ondevicechange = () => refreshAudioDeviceLists();
+      }
+    }
+
+    setSessionState('paused');
+    setCurrentLead(null);
+    setInterval(fetchMetrics, 15000);
+    setInterval(fetchLeaderboard, 20000);
+    renderLogs();
+    updateMuteButton();
+    updateCampaignControls();
+
+    // ===== Twilio JS Client (browser softphone) =====
+
+    async function ensureAudioAccess() {
+      if (audioReady) return true;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        audioReady = true;
+        setAudioStatus('Browser cannot request microphone access, assuming default input.');
+        return true;
+      }
+      if (!audioAccessPromise) {
+        audioAccessPromise = navigator.mediaDevices
+          .getUserMedia({ audio: true })
+          .then(stream => {
+            stream.getTracks().forEach(track => track.stop());
+            audioReady = true;
+            pushLog('Microphone ready', 'AUDIO');
+            setAudioStatus('Microphone unlocked. Select devices before dialing.');
+            refreshAudioDeviceLists();
+            return true;
+          })
+          .catch(err => {
+            audioAccessPromise = null;
+            setAudioStatus('Microphone permission denied. Allow access to continue.');
+            throw err;
+          });
+      }
+      return audioAccessPromise;
+    }
+
+    function handleCallWrapUp(label) {
+      if (label) {
+        console.log('[Dialer] Call finished:', label);
+      }
+      activeConnection = null;
+      setMuteState(false);
+      if (hasPendingDispo) {
+        bumpCallState('Awaiting disposition');
+        statusTextEl.innerHTML = 'Call ended. Add a <span>disposition</span> to continue.';
+      } else {
+        bumpCallState('');
+      }
+      updateMuteButton();
+    }
+
+    async function recordLiveConnect() {
+      if (recordedLiveConnect) return;
+      if (!agentId || !currentLead) return;
+      recordedLiveConnect = true;
+      try {
+        await fetch('/api/disposition', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId,
+            campaignId: currentCampaignId || assignedCampaignId,
+            outcome: 'connected',
+            notes: '',
+            leadPhone: currentLead.phone,
+            leadName: currentLead.name || ''
+          })
+        });
+      } catch (err) {
+        console.error('Failed to log live connect', err);
+        recordedLiveConnect = false;
+      }
+    }
+
+    async function setupVoiceDevice() {
+      if (twilioDevice) {
+        syncSpeakerSupportUi(Boolean(twilioDevice.audio && twilioDevice.audio.isOutputSelectionSupported));
+        refreshAudioDeviceLists();
+        if (!twilioRegistered) {
+          twilioDevice.register();
+        }
+        return twilioDevice;
+      }
+
+      if (voiceSetupPromise) {
+        return voiceSetupPromise;
+      }
+
+      voiceSetupPromise = (async () => {
+        if (!window.Twilio || !Twilio.Device) {
+          throw new Error('Twilio SDK not loaded — `Twilio.Device` is missing');
+        }
+
+        await ensureAudioAccess();
+        await refreshAudioDeviceLists();
+
+        console.log('[Dialer] Requesting /api/voice-token …');
+        const res = await fetch('/api/voice-token', {
+          method: 'GET',
+          credentials: 'include'
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Failed to fetch voice token: ${errText}`);
+        }
+
+        const data = await res.json();
+        console.log('[Dialer] Got voice token for identity:', data.identity);
+
+        twilioDevice = new Twilio.Device(data.token, {
+          logLevel: 1,
+          enableRingingState: true,
+          codecPreferences: ['opus', 'pcmu']
+        });
+        syncSpeakerSupportUi(Boolean(twilioDevice.audio && twilioDevice.audio.isOutputSelectionSupported));
+
+        if (twilioDevice.audio && typeof twilioDevice.audio.on === 'function') {
+          twilioDevice.audio.on('deviceChange', () => refreshAudioDeviceLists());
+        }
+
+        twilioDevice.on('registered', () => {
+          twilioRegistered = true;
+          pushLog('Softphone registered', 'READY');
+          if (sessionState !== 'running') {
+            statusTextEl.textContent = 'Softphone ready. Pull your next lead whenever you are set.';
+          }
+        });
+
+        twilioDevice.on('unregistered', () => {
+          twilioRegistered = false;
+          console.warn('[Dialer] Twilio Device unregistered (offline)');
+        });
+
+        twilioDevice.on('error', err => {
+          console.error('[Dialer] Twilio Device error:', err);
+        });
+
+        twilioDevice.on('incoming', call => {
+          console.log('[Dialer] Incoming call to browser client');
+          pendingIncomingCall = call;
+          activeConnection = call;
+          setMuteState(false);
+          updateMuteButton();
+          bumpCallState('Agent ringing');
+
+          const from = call.parameters?.From || 'Unknown';
+          if (incomingMetaEl) incomingMetaEl.textContent = `From: ${from}`;
+          showIncomingModal();
+
+          call.on('accept', () => {
+            const leadName = (currentLead && currentLead.name) || 'Lead';
+            bumpCallState('Live call');
+            statusTextEl.innerHTML = `Live with <span>${leadName}</span>.`;
+            pushLog(`Live with ${leadName}`, 'LIVE');
+            recordLiveConnect();
+            pendingIncomingCall = null;
+            // keep modal open; it will close on disconnect/end
+            if (pendingManualPhone) {
+              openManualContactModal(pendingManualPhone);
+              pendingManualPhone = null;
+            }
+          });
+
+          ['disconnect', 'cancel', 'reject'].forEach(eventName => {
+            call.on(eventName, () => {
+              handleCallWrapUp(eventName);
+              hideIncomingModal();
+              pendingIncomingCall = null;
+            });
+          });
+
+          call.on('error', err => {
+            console.error('[Dialer] Call error:', err);
+            handleCallWrapUp('error');
+            hideIncomingModal();
+            pendingIncomingCall = null;
+          });
+        });
+
+        await applyMicSelection(pendingMicDeviceId);
+        await applySpeakerSelection(pendingSpeakerDeviceId);
+        twilioDevice.register();
+        return twilioDevice;
+      })();
+
+      try {
+        return await voiceSetupPromise;
+      } finally {
+        voiceSetupPromise = null;
+      }
+    }
+  </script>
+
+  <!-- ===== Agent Login Overlay ===== -->
+  <div id="agent-login-overlay" style="
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(180deg, #01030b 0%, #020617 55%, #030918 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  ">
+    <div style="
+      width: 360px;
+      max-width: 90%;
+      background: rgba(5,10,25,0.96);
+      border-radius: 20px;
+      border: 1px solid rgba(77,243,163,0.3);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.65);
+      padding: 24px;
+      color: #e5f1ff;
+    ">
+      <div style="font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; opacity: 0.7; margin-bottom: 4px;">
+        REHASH DIALER · REVCORE
+      </div>
+      <div style="font-size: 20px; font-weight: 600; margin-bottom: 4px;">Agent Login</div>
+
+      <!-- Username -->
+      <input id="agent-username-input"
+        placeholder="Username"
+        style="
+          width: 100%;
+          background: rgba(10,18,40,0.95);
+          border-radius: 999px;
+          border: 1px solid rgba(120,135,180,0.7);
+          padding: 10px 14px;
+          color: #f9fbff;
+          font-size: 13px;
+          outline: none;
+          margin-bottom: 10px;
+        "
+        onkeydown="if(event.key === 'Enter'){ window._rehashLogin(); }"
+      />
+
+      <!-- Password -->
+      <input id="agent-password-input"
+        type="password"
+        placeholder="Password"
+        style="
+          width: 100%;
+          background: rgba(10,18,40,0.95);
+          border-radius: 999px;
+          border: 1px solid rgba(120,135,180,0.7);
+          padding: 10px 14px;
+          color: #f9fbff;
+          font-size: 13px;
+          outline: none;
+          margin-bottom: 10px;
+        "
+        onkeydown="if(event.key === 'Enter'){ window._rehashLogin(); }"
+      />
+
+      <!-- Error box -->
+      <div id="agent-login-error" style="
+        min-height: 16px;
+        font-size: 12px;
+        color: #f97373;
+        margin-bottom: 10px;
+      "></div>
+
+      <!-- Login Button -->
+      <button onclick="window._rehashLogin()" style="
+        width: 100%;
+        border-radius: 999px;
+        border: none;
+        padding: 12px 14px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        background: linear-gradient(90deg, #44fd3a, #3da9ff);
+        color: #000d17;
+        box-shadow: 0 18px 18px rgba(61,169,255,0.6);
+        margin-bottom: 12px;
+      ">
+        Log In & Load Dialer
+      </button>
+    </div>
+  </div>
+
+  <!-- LOGIN + SESSION SCRIPT -->
+  <script>
+    // Helper: update agent badge text if we can find it
+    function _rehashUpdateAgentBadge(agentName) {
+      const badge = document.querySelector('[data-agent-badge], .agent-badge, .agent-tag, #agentLabel');
+      if (badge) {
+        badge.textContent = `Agent • ${agentName}`;
+      }
+    }
+
+    function lockDialerUi() {
+      document.body.setAttribute('data-locked', 'true');
+      const overlay = document.getElementById('agent-login-overlay');
+      if (overlay) overlay.style.display = 'flex';
+    }
+
+    function unlockDialerUi() {
+      document.body.removeAttribute('data-locked');
+      const overlay = document.getElementById('agent-login-overlay');
+      if (overlay) overlay.style.display = 'none';
+    }
+
+    // expose login function globally
+    window._rehashLogin = async function () {
+      const usernameInput = document.getElementById('agent-username-input');
+      const passwordInput = document.getElementById('agent-password-input');
+      const errBox        = document.getElementById('agent-login-error');
+
+      const username = (usernameInput.value || '').trim();
+      const password = (passwordInput.value || '').trim();
+
+      if (!username) {
+        errBox.textContent = 'Please enter a username (e.g., outbound1).';
+        lockDialerUi();
+        return;
+      }
+
+      if (!password) {
+        errBox.textContent = 'Please enter the password.';
+        lockDialerUi();
+        return;
+      }
+
+      try {
+        const res = await fetch('/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          errBox.textContent = data.error || 'Login failed.';
+          lockDialerUi();
+          return;
+        }
+
+        // success
+        agentId = data.agentId || username;
+        _rehashUpdateAgentBadge(data.agentName || username);
+        setAssignedCampaign(data.campaignId || null, data.campaignName || '');
+        errBox.textContent = 'Preparing your softphone…';
+
+        console.log('[Dialer] Logged in as', agentId, '- setting up Twilio Device');
+        try {
+          await setupVoiceDevice();
+          errBox.textContent = '';
+          unlockDialerUi();
+          fetchMetrics();
+          fetchLeaderboard();
+        } catch (deviceErr) {
+          console.error(deviceErr);
+          errBox.textContent = 'Please allow microphone access to continue.';
+          lockDialerUi();
+        }
+      } catch (e) {
+        console.error(e);
+        errBox.textContent = 'Network error. Please try again.';
+        lockDialerUi();
+      }
+    };
+
+    // On page load, check if already logged in
+    window.addEventListener('load', async () => {
+      lockDialerUi();
+      const errBox = document.getElementById('agent-login-error');
+      try {
+        const res  = await fetch('/me');
+        const data = await res.json();
+
+        if (data.loggedIn) {
+          agentId = data.agentId;
+          _rehashUpdateAgentBadge(data.agentName || data.agentId || 'Agent');
+          setAssignedCampaign(data.campaignId || null, data.campaignName || '');
+          console.log('[Dialer] Session already logged in as', agentId, '- setting up Twilio Device');
+          try {
+            await setupVoiceDevice();
+            if (errBox) errBox.textContent = '';
+            unlockDialerUi();
+            fetchMetrics();
+            fetchLeaderboard();
+          } catch (deviceErr) {
+            console.error(deviceErr);
+            if (errBox) {
+              errBox.textContent = 'Please allow microphone access to continue.';
+            }
+            lockDialerUi();
+          }
+        } else {
+          if (errBox) errBox.textContent = '';
+          lockDialerUi();
+        }
+      } catch (e) {
+        console.error(e);
+        if (errBox) errBox.textContent = 'Unable to verify login. Please sign in.';
+        lockDialerUi();
+      }
+    });
+  </script>
+</body>
+</html>

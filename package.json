@@ -1,0 +1,17 @@
+{
+  "name": "rehash-dialer",
+  "version": "1.0.0",
+  "description": "Rehash Dialer V1 - Twilio + Local Presence + Metrics",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "body-parser": "^1.20.2",
+    "dotenv": "^16.4.0",
+    "express": "^4.19.0",
+    "express-session": "^1.18.2",
+    "twilio": "^5.3.0"
+  }
+}

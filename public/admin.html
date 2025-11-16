@@ -1,0 +1,2597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rehash Dialer Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  
+<style>
+  :root {
+    --bg: #030712;
+    --panel: rgba(10, 14, 32, 0.82);
+    --panel-strong: rgba(14, 18, 38, 0.94);
+    --border: rgba(140, 158, 190, 0.45);
+    --border-strong: rgba(255, 255, 255, 0.08);
+    --text: #e9f0ff;
+    --muted: #9fb2d0;
+    --text-soft: #9fb2d0;
+    --accent: #51f2a4;
+    --accent-2: #48cfff;
+    --accent-3: #c084fc;
+    --danger: #ff6b6b;
+    --shadow: 0 26px 120px rgba(0,0,0,0.6);
+    --radius: 18px;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(circle at 18% 8%, rgba(72, 207, 255, 0.18), transparent 40%),
+      radial-gradient(circle at 82% 12%, rgba(81, 242, 164, 0.16), transparent 38%),
+      radial-gradient(circle at 40% 120%, rgba(192, 132, 252, 0.12), transparent 55%),
+      #030712;
+    padding: 24px 18px 32px;
+    letter-spacing: 0.01em;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 140px 140px, 140px 140px;
+    opacity: 0.35;
+    pointer-events: none;
+  }
+
+  .shell {
+    max-width: 1260px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 220px;
+  }
+
+  .brand-mark {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(81, 242, 164, 0.16), rgba(72, 207, 255, 0.14));
+    border: 1px solid var(--border);
+    display: grid;
+    place-items: center;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--text);
+  }
+
+  .brand-text-main {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin: 0;
+  }
+
+  .brand-text-sub {
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .pill {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text);
+    background: rgba(255,255,255,0.04);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .pill-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: 0 0 12px rgba(81, 242, 164, 0.9);
+  }
+
+  .gradient-card {
+    background:
+      linear-gradient(135deg, rgba(81, 242, 164, 0.08), rgba(72, 207, 255, 0.08)),
+      var(--panel);
+    border-radius: 22px;
+    padding: 22px 22px 18px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .gradient-card::before {
+    content: "";
+    position: absolute;
+    inset: -30%;
+    background: radial-gradient(circle at 20% 0, rgba(255,255,255,0.12), transparent 45%);
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .gradient-card-inner {
+    position: relative;
+    z-index: 1;
+  }
+
+  .gradient-card-title {
+    font-size: 13px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 6px;
+  }
+
+  .gradient-card-heading {
+    font-size: 26px;
+    font-weight: 700;
+    margin: 0 0 6px;
+  }
+
+  .gradient-card-sub {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.5;
+    max-width: 880px;
+  }
+
+  .metrics-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+  }
+
+  .metric-card {
+    background: linear-gradient(160deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+    border-radius: 16px;
+    padding: 12px 13px;
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+
+  .metric-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .metric-value {
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .metric-subline {
+    font-size: 12px;
+    margin-top: 4px;
+    color: var(--muted);
+  }
+
+  .metric-chip,
+  .metric-pill {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(81, 242, 164, 0.7);
+    color: #c9fddf;
+    background: rgba(81, 242, 164, 0.12);
+    margin-left: 6px;
+    white-space: nowrap;
+  }
+
+  .metric-pill {
+    border-color: rgba(72, 207, 255, 0.7);
+    color: #e0f2fe;
+    background: rgba(72, 207, 255, 0.12);
+  }
+
+  /* MAIN TWO-COLUMN LAYOUT */
+
+  .layout-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    margin-top: 4px;
+  }
+
+  @media (max-width: 1080px) {
+    .metrics-row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 720px) {
+    .metrics-row {
+      grid-template-columns: 1fr;
+    }
+    body {
+      padding: 18px 14px 24px;
+    }
+  }
+
+  /* RIGHT COLUMN – INTERNAL GRID TO BALANCE CARDS */
+
+  .right-column-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  /* CARDS / PANELS */
+
+  .card {
+    background: var(--panel-strong);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    padding: 16px 17px 14px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 0;
+  }
+
+  .card::before {
+    content: "";
+    position: absolute;
+    inset: -40% 10% 20% -20%;
+    background: radial-gradient(circle at 20% 30%, rgba(72,207,255,0.12), transparent 55%);
+    pointer-events: none;
+    opacity: 0.65;
+    z-index: -1;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    gap: 10px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .card-title {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--muted);
+  }
+
+  .card-subtitle {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+
+  .badge-soft {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .assigned-campaign-note {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .metric-status-line {
+    font-size: 12px;
+    margin-top: 6px;
+    color: var(--muted);
+  }
+
+  /* Make the left column card adapt height instead of forcing 100% inline */
+  #usersCard {
+    height: auto !important;
+  }
+
+  /* FORMS & INPUTS */
+
+  label {
+    font-size: 12px;
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  input,
+  select {
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    margin-bottom: 8px;
+    transition: border 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+
+  select[multiple] {
+    min-height: 110px;
+  }
+
+  input:focus,
+  select:focus {
+    border-color: rgba(72, 207, 255, 0.8);
+    box-shadow: 0 12px 38px rgba(72, 207, 255, 0.12);
+    background: rgba(255,255,255,0.04);
+  }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .field-note {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+
+  @media (max-width: 780px) {
+    .field-row {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .lead-preview {
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--muted);
+    min-height: 48px;
+    line-height: 1.4;
+    background: rgba(255,255,255,0.03);
+    display: flex;
+    align-items: center;
+  }
+
+  /* SETTINGS / TOGGLES */
+
+  .setting-item {
+    margin-bottom: 14px;
+    border-bottom: 1px dashed rgba(140, 158, 190, 0.35);
+    padding-bottom: 12px;
+  }
+
+  .setting-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .setting-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .setting-toggle input {
+    width: auto;
+    margin: 0;
+    transform: scale(1.05);
+    accent-color: var(--accent);
+  }
+
+  .setting-desc {
+    margin: 6px 0 0 24px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* BUTTONS */
+
+  .btn {
+    border-radius: 12px;
+    border: 1px solid transparent;
+    padding: 9px 15px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: transform 0.08s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+    background: rgba(255,255,255,0.04);
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .btn:active {
+    transform: translateY(1px);
+    box-shadow: none;
+  }
+
+  .btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+    box-shadow: none;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #51f2a4, #48cfff);
+    color: #032217;
+    border: 1px solid rgba(81, 242, 164, 0.85);
+    box-shadow: 0 16px 40px rgba(72, 207, 255, 0.35);
+  }
+
+  .btn-secondary {
+    background: rgba(255,255,255,0.04);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-danger {
+    background: linear-gradient(120deg, rgba(255, 107, 107, 0.9), rgba(120, 26, 36, 0.92));
+    color: #ffecec;
+    border: 1px solid rgba(255, 107, 107, 0.8);
+    box-shadow: 0 12px 30px rgba(255, 107, 107, 0.28);
+  }
+
+  .btn-mini {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+
+  .btn-small {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+
+  /* TABLES */
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-top: 8px;
+    table-layout: fixed;
+  }
+
+  th,
+  td {
+    padding: 7px 9px;
+    border-bottom: 1px solid rgba(140, 158, 190, 0.35);
+    text-align: left;
+    word-break: break-word;
+    vertical-align: middle;
+  }
+
+  th {
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  tr.highlight-row {
+    background: radial-gradient(circle at left, rgba(72, 207, 255, 0.12), transparent 60%);
+  }
+
+  .actions-cell {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  /* STATUS TEXT / BADGES */
+
+  .status-text {
+    font-size: 12px;
+    margin-top: 8px;
+    min-height: 16px;
+    color: var(--muted);
+  }
+
+  .status-text.status-ok {
+    color: #c9fddf;
+  }
+
+  .status-text.status-err {
+    color: #fecaca;
+  }
+
+  .login-strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+
+  .login-strip input {
+    flex: 1 1 220px;
+    max-width: 260px;
+    margin-bottom: 0;
+  }
+
+  .tag {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--accent);
+    box-shadow: 0 0 12px rgba(81, 242, 164, 0.9);
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  .status-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+  }
+
+  .status-active {
+    color: #c9fddf;
+    border-color: rgba(81, 242, 164, 0.7);
+  }
+
+  .status-active .status-dot {
+    background: var(--accent);
+    box-shadow: 0 0 12px rgba(81, 242, 164, 0.9);
+  }
+
+  .status-idle {
+    color: #facc15;
+    border-color: rgba(250, 204, 21, 0.7);
+  }
+
+  .status-idle .status-dot {
+    background: #facc15;
+    box-shadow: 0 0 10px rgba(250, 204, 21, 0.8);
+  }
+
+  .status-offline {
+    color: #fecaca;
+    border-color: rgba(255, 107, 107, 0.9);
+    animation: adminOfflinePulse 2.4s ease-in-out infinite;
+  }
+
+  .status-offline .status-dot {
+    background: var(--danger);
+    box-shadow: 0 0 10px rgba(255, 107, 107, 0.9);
+  }
+
+  @keyframes adminOfflinePulse {
+    0% {
+      box-shadow: 0 0 8px rgba(255, 107, 107, 0.15);
+    }
+    50% {
+      box-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
+    }
+    100% {
+      box-shadow: 0 0 8px rgba(255, 107, 107, 0.15);
+    }
+  }
+</style>
+
+</head>
+<body>
+  <div class="shell">
+    <div class="top-row">
+      <div class="brand">
+        <div class="brand-mark">RE</div>
+        <div>
+          <div class="brand-text-main">Rehash Engine</div>
+          <div class="brand-text-sub">Dialer · Admin Control</div>
+        </div>
+      </div>
+      <div class="pill">
+        <span class="pill-dot"></span>
+        LIVE PIPELINE VIEW
+      </div>
+    </div>
+
+    <!-- HERO + METRICS -->
+    <div class="gradient-card">
+      <div class="gradient-card-inner">
+        <div class="gradient-card-title">Overview</div>
+        <h1 class="gradient-card-heading">Outbound performance & teams at a glance</h1>
+        <div class="gradient-card-sub">
+          Manage agents, campaigns, and watch key metrics for your outbound rehash engine without digging through Twilio or GHL.
+        </div>
+
+        <!-- Metrics row: hidden until admin unlock -->
+        <div class="metrics-row hidden" id="metricsRow">
+          <div class="metric-card">
+            <div class="metric-label">Agents Online</div>
+            <div class="metric-value">
+              <span id="metricOnlineAgents">0</span>
+              <span class="metric-pill" id="metricTotalAgents">0 total slots</span>
+            </div>
+            <div class="metric-status-line">
+              <span id="metricOfflineAgents">0 offline</span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Total Calls</div>
+            <div class="metric-value">
+              <span id="metricCalls">0</span>
+            </div>
+            <div class="metric-subline">
+              Across all agents & campaigns.
+            </div>
+            <div class="metric-status-line">
+              Avg: <span id="metricAvgDuration">0s</span> · Last: <span id="metricLastDuration">0s</span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Live Connects</div>
+            <div class="metric-value">
+              <span id="metricLive">0</span>
+              <span class="metric-chip" id="metricLiveRate">0% connect</span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Booked Outcomes</div>
+            <div class="metric-value">
+              <span id="metricConversions">0</span>
+            </div>
+            <div class="metric-subline">
+              Booked demos or high-intent outcomes.
+            </div>
+          </div>
+        </div>
+
+        <!-- Admin login strip -->
+        <div class="login-strip" id="loginStrip">
+          <div class="tag" id="lockTag">
+            <span class="dot"></span>
+            Admin locked · enter password to reveal metrics & controls
+          </div>
+          <input
+            type="password"
+            id="adminPasswordInput"
+            placeholder="Admin password"
+          />
+          <button class="btn btn-secondary" id="adminLoginBtn">Unlock Admin</button>
+          <span id="loginStatus" class="status-text"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- GRID: Users / Campaigns & Agent Leaderboard (hidden until unlock) -->
+    <div class="layout-grid hidden" id="mainContent">
+      <!-- USER MANAGEMENT -->
+      <div class="card" id="usersCard" style="height:100%;">
+        <div class="card-header">
+          <div>
+            <div class="card-title">User Management</div>
+            <div class="card-subtitle">
+              Create, update, and remove dialer logins for your outbound seats.
+            </div>
+          </div>
+          <div class="badge-soft">
+            Users: <span id="usersCount">0</span>
+          </div>
+        </div>
+
+        <div id="userFormArea" class="hidden">
+          <div class="field-row">
+            <div>
+              <label for="usernameInput">Username</label>
+              <input id="usernameInput" placeholder="e.g. outbound1" />
+            </div>
+            <div>
+              <label for="passwordInput">Password</label>
+              <input id="passwordInput" placeholder="Set or update password" />
+            </div>
+          </div>
+          <div class="field-row">
+            <div>
+              <label for="newUsernameInput">Rename (optional)</label>
+              <input id="newUsernameInput" placeholder="New username (optional)" />
+            </div>
+            <div>
+              <label for="roleSelect">Role</label>
+              <select id="roleSelect">
+                <option value="agent">Agent</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-row">
+            <div>
+              <label for="userCampaignSelect">Assigned Campaign</label>
+              <select id="userCampaignSelect">
+                <option value="">No campaign</option>
+              </select>
+            </div>
+            <div>
+              <label for="userDialSlotSelect">Dial Slot</label>
+              <select id="userDialSlotSelect">
+                <option value="">Select slot…</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-bottom: 10px;">
+            <button class="btn btn-primary" id="createUserBtn">Create User</button>
+            <button class="btn btn-secondary" id="updateUserBtn">Update User</button>
+          </div>
+          <div id="userStatus" class="status-text"></div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Campaign</th>
+              <th>Dial Slot</th>
+              <th>Password</th>
+              <th style="width:1%;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody">
+            <tr>
+              <td colspan="7" style="padding:10px 8px; color:var(--text-soft);">
+                Unlock admin to view and manage users.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- CAMPAIGNS + LEADERBOARD -->
+      <div class="right-column-grid">
+        <!-- PHONE NUMBERS -->
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Phone Numbers & Slots</div>
+              <div class="card-subtitle">
+                Manage agent dial targets, inbound numbers, and local presence pools.
+              </div>
+            </div>
+            <div class="badge-soft">
+              Slots: <span id="slotCount">0</span>
+            </div>
+          </div>
+          <div id="slotFormArea" class="hidden">
+            <div class="field-row">
+              <div>
+                <label for="slotIdInput">Slot ID</label>
+                <input id="slotIdInput" placeholder="e.g. outbound1" />
+              </div>
+              <div>
+                <label for="slotNameInput">Display Name</label>
+                <input id="slotNameInput" placeholder="Slot label (e.g. John’s line)" />
+              </div>
+            </div>
+            <div class="field-row">
+              <div>
+                <label for="slotDialInput">Dial Target (agent phone)</label>
+                <input id="slotDialInput" placeholder="+15551234567" />
+                <div class="field-note">Number we dial to reach the agent.</div>
+              </div>
+              <div>
+                <label for="slotInboundInput">Inbound Number (optional)</label>
+                <input id="slotInboundInput" placeholder="+15557654321" />
+                <div class="field-note">If set, inbound calls to this number route to this agent first.</div>
+              </div>
+            </div>
+            <div style="margin-bottom: 10px;">
+              <button class="btn btn-primary" id="saveSlotBtn">Save Slot</button>
+              <button class="btn btn-secondary" id="resetSlotBtn">Clear</button>
+              <button class="btn btn-danger" id="deleteSlotBtn">Delete Slot</button>
+            </div>
+            <div id="slotStatus" class="status-text"></div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Outbound #</th>
+                <th>Inbound #</th>
+                <th style="width:1%;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="slotTableBody">
+              <tr>
+                <td colspan="4" style="padding:10px 8px; color:var(--text-soft);">
+                  Unlock admin to view and manage inbound/outbound numbers.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="margin-top: 14px; border-top: 1px dashed rgba(148,163,184,0.25); padding-top: 12px;">
+            <div class="card-title" style="font-size:0.9rem;">Local Presence Numbers</div>
+            <div class="card-subtitle">Map area codes to outbound numbers for presence.</div>
+            <div class="field-row">
+              <div>
+                <label for="lpAreaInput">Area Code</label>
+                <input id="lpAreaInput" placeholder="e.g. 480" />
+              </div>
+              <div>
+                <label for="lpNumberInput">Number</label>
+                <input id="lpNumberInput" placeholder="+14801234567" />
+              </div>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <button class="btn btn-primary" id="addLpBtn">Add / Update Area Code</button>
+              <button class="btn btn-secondary" id="clearLpBtn">Clear Inputs</button>
+            </div>
+            <div id="lpStatus" class="status-text"></div>
+            <table style="margin-top:8px;">
+              <thead>
+                <tr>
+                  <th>Area</th>
+                  <th>Number</th>
+                  <th style="width:1%;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="lpTableBody">
+                <tr>
+                  <td colspan="3" style="padding:10px 8px; color:var(--text-soft);">
+                    Unlock admin to view and manage local presence.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- CAMPAIGNS -->
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Campaigns</div>
+              <div class="card-subtitle">
+                Manage dialing queues and lead counts.
+              </div>
+            </div>
+            <div class="badge-soft">
+              Campaigns: <span id="campaignCount">0</span>
+            </div>
+          </div>
+          <div id="campaignFormArea" class="hidden">
+          <div class="field-row">
+            <div>
+              <label for="campaignTagSelect">GHL Tag</label>
+              <select id="campaignTagSelect" disabled>
+                <option value="">Loading tags…</option>
+              </select>
+              <input id="campaignTagInput" type="hidden" />
+              <div class="field-note">Pick the tag you applied in GoHighLevel – we’ll mirror it here.</div>
+            </div>
+            <div>
+              <label>Lead Counts</label>
+              <div class="lead-preview">
+                <span id="campaignLeadPreviewText">Synced automatically from GoHighLevel.</span>
+              </div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div>
+              <label for="campaignIdInput">Campaign ID</label>
+              <input id="campaignIdInput" placeholder="Auto-filled from tag" readonly />
+              <div class="field-note">Used internally – slugified from the tag above.</div>
+            </div>
+            <div>
+              <label for="campaignNameInput">Label</label>
+              <input id="campaignNameInput" placeholder="Auto-filled from tag" readonly />
+              <div class="field-note">Friendly name shown in tables and dropdowns.</div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div>
+              <label for="campaignPipelineSelect">GHL Pipeline</label>
+              <select id="campaignPipelineSelect" disabled>
+                <option value="">Loading pipelines…</option>
+              </select>
+              <div class="field-note">Defaults to “Rehash Engine” and can be changed if needed.</div>
+            </div>
+            <div>
+              <label for="campaignStageSelect">GHL Stage</label>
+              <select id="campaignStageSelect" disabled>
+                <option value="">Select pipeline first</option>
+              </select>
+              <div class="field-note">Defaults to “New Leads”.</div>
+            </div>
+          </div>
+            <div class="assigned-campaign-note" style="margin-bottom:8px;">
+              Select the pipeline/stage where new leads live. Tag must match the tag you apply when importing into GoHighLevel.
+            </div>
+            <div style="margin-bottom: 8px;">
+              <button class="btn btn-primary" id="createCampaignBtn" type="button">Create Campaign</button>
+              <button class="btn btn-secondary" id="updateCampaignBtn" type="button">Update Campaign</button>
+            </div>
+            <div id="campaignStatus" class="status-text"></div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Label</th>
+                <th>Pipeline</th>
+                <th>Stage</th>
+                <th>Tag</th>
+                <th>Total</th>
+                <th>Remaining</th>
+                <th style="width:1%;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="campaignsTableBody">
+              <tr>
+                <td colspan="8" style="padding:8px; color:var(--text-soft);">
+                  Unlock admin to load campaigns.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card hidden" id="campaignMetricsCard" style="margin-bottom:16px;">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Campaign Metrics</div>
+              <div class="card-subtitle">
+                Filter totals by agent and disposition.
+              </div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div>
+              <label for="campaignMetricsSelect">Campaign</label>
+              <select id="campaignMetricsSelect">
+                <option value="">Select campaign…</option>
+              </select>
+            </div>
+            <div>
+              <label for="campaignAgentFilter">Agent Filter</label>
+              <select id="campaignAgentFilter" multiple></select>
+            </div>
+          </div>
+          <div class="field-row">
+            <div>
+              <label for="campaignDispoFilter">Disposition Filter</label>
+              <select id="campaignDispoFilter" multiple></select>
+            </div>
+            <div style="display:flex; align-items:flex-end;">
+              <button class="btn btn-secondary" id="applyCampaignFiltersBtn" type="button">Apply Filters</button>
+            </div>
+          </div>
+          <div id="campaignMetricsStatus" class="status-text"></div>
+          <div id="campaignMetricsSummary" class="metric-status-line" style="margin-top:8px;"></div>
+          <table style="margin-top:12px;">
+            <thead>
+              <tr>
+                <th>Disposition</th>
+                <th>Count</th>
+              </tr>
+            </thead>
+            <tbody id="campaignDispoTableBody">
+              <tr>
+                <td colspan="2" style="padding:8px; color:var(--text-soft);">
+                  Select a campaign to view disposition totals.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <table style="margin-top:12px;">
+            <thead>
+              <tr>
+                <th>Agent</th>
+                <th>Total Logged</th>
+                <th>Breakdown</th>
+              </tr>
+            </thead>
+            <tbody id="campaignAgentTableBody">
+              <tr>
+                <td colspan="3" style="padding:8px; color:var(--text-soft);">
+                  Select a campaign to view agent performance.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- LOCAL LEAD UPLOAD (fallback) -->
+        <div class="card hidden" id="localUploadCard" style="margin-bottom:16px;">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Local Lead Upload</div>
+              <div class="card-subtitle">
+                Offline fallback while GHL is down. Upload CSV or JSON and map to a campaign.
+              </div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div>
+              <label for="localCampaignSelect">Campaign</label>
+              <select id="localCampaignSelect">
+                <option value="">Select campaign…</option>
+              </select>
+            </div>
+            <div>
+              <label for="localModeSelect">Mode</label>
+              <select id="localModeSelect">
+                <option value="replace">Replace existing queue</option>
+                <option value="append">Append to queue</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-row">
+            <div>
+              <label for="localFileInput">Lead file (CSV or JSON)</label>
+              <input id="localFileInput" type="file" accept=".csv,.json,.txt" />
+              <div class="field-note">Columns supported: name, firstName, lastName, phone/phoneNumber, company, email, city, state.</div>
+            </div>
+            <div style="display:flex; align-items:flex-end;">
+              <button class="btn btn-secondary" id="localUploadBtn" type="button">Upload Leads</button>
+            </div>
+          </div>
+          <div id="localUploadStatus" class="status-text"></div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div class="card hidden" id="settingsCard">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Dialer Settings</div>
+              <div class="card-subtitle">
+                Toggle Twilio features without redeploying the backend.
+              </div>
+            </div>
+          </div>
+          <div class="setting-item">
+            <label class="setting-toggle">
+              <input type="checkbox" id="toggleMachineDetection" />
+              Enable Answering Machine Detection
+            </label>
+            <p class="setting-desc">
+              Twilio will pause briefly after a lead answers to decide if it’s a human or voicemail. Machines can be auto-disconnected for faster next dials.
+            </p>
+          </div>
+          <div class="setting-item">
+            <label class="setting-toggle">
+              <input type="checkbox" id="toggleCallRecording" />
+              Record Agent Calls
+            </label>
+            <p class="setting-desc">
+              Starts a dual-channel recording for each connected call. Recording status callbacks are logged in the backend for compliance workflows.
+            </p>
+          </div>
+          <button class="btn btn-secondary" id="saveSettingsBtn">Save Settings</button>
+          <div id="settingsStatus" class="status-text" style="margin-top:8px;"></div>
+        </div>
+
+        <!-- LEADERBOARD -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Agent Metrics</div>
+              <div class="card-subtitle">
+                Per-seat performance across all outbound campaigns.
+              </div>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Agent</th>
+                <th>Status</th>
+                <th>Total Calls</th>
+                <th>Live</th>
+                <th>Booked</th>
+                <th>Avg Dur</th>
+                <th>Last Call</th>
+                <th>Rank</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboardBody">
+              <tr>
+                <td colspan="8" style="padding:8px; color:var(--text-soft);">
+                  Unlock admin and start calling to populate metrics.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let adminKey = "";
+    let statusByAgent = {};
+    let campaignMap = {};
+    let agentSlotMap = {};
+    let userMap = {};
+    let localPresenceMap = {};
+    let ghlPipelines = [];
+    let ghlTags = [];
+    const DISPOSITION_LABELS = {
+      connected: 'Connected',
+      not_interested: 'Not Interested',
+      callback_requested: 'Callback Requested',
+      gatekeeper_transfer: 'Gatekeeper – Warm Transfer',
+      wrong_contact: 'Wrong Contact',
+      machine: 'Machine',
+      machine_voicemail: 'Machine / Voicemail',
+      bad_number: 'Bad Number',
+      no_answer: 'No Answer',
+      busy: 'Busy',
+      failed: 'Failed',
+      booked: 'Booked Demo'
+    };
+    const DEFAULT_PIPELINE_NAMES = ['rehash engine', 'rehash'];
+    const DEFAULT_STAGE_NAMES = ['new leads', 'new lead'];
+
+    const adminPasswordInput = document.getElementById('adminPasswordInput');
+    const adminLoginBtn = document.getElementById('adminLoginBtn');
+    const loginStatus = document.getElementById('loginStatus');
+
+    const metricsRow = document.getElementById('metricsRow');
+    const mainContent = document.getElementById('mainContent');
+    const userFormArea = document.getElementById('userFormArea');
+    const usersTableBody = document.getElementById('usersTableBody');
+    const usersCount = document.getElementById('usersCount');
+    const userStatus = document.getElementById('userStatus');
+
+    const usernameInput = document.getElementById('usernameInput');
+    const passwordInput = document.getElementById('passwordInput');
+    const newUsernameInput = document.getElementById('newUsernameInput');
+    const roleSelect = document.getElementById('roleSelect');
+    const userCampaignSelect = document.getElementById('userCampaignSelect');
+    const userDialSlotSelect = document.getElementById('userDialSlotSelect');
+
+    const campaignCount = document.getElementById('campaignCount');
+    const campaignsTableBody = document.getElementById('campaignsTableBody');
+    const campaignPipelineSelect = document.getElementById('campaignPipelineSelect');
+    const campaignStageSelect = document.getElementById('campaignStageSelect');
+    const campaignTagSelect = document.getElementById('campaignTagSelect');
+    const campaignTagInput = document.getElementById('campaignTagInput');
+
+    const leaderboardBody = document.getElementById('leaderboardBody');
+    const settingsCard = document.getElementById('settingsCard');
+    const campaignFormArea = document.getElementById('campaignFormArea');
+    const campaignIdInput = document.getElementById('campaignIdInput');
+    const campaignNameInput = document.getElementById('campaignNameInput');
+    const campaignLeadPreviewText = document.getElementById('campaignLeadPreviewText');
+    const createCampaignBtn = document.getElementById('createCampaignBtn');
+    const updateCampaignBtn = document.getElementById('updateCampaignBtn');
+    const campaignStatus = document.getElementById('campaignStatus');
+    const campaignMetricsCard = document.getElementById('campaignMetricsCard');
+    const campaignMetricsSelect = document.getElementById('campaignMetricsSelect');
+    const campaignAgentFilter = document.getElementById('campaignAgentFilter');
+    const campaignDispoFilter = document.getElementById('campaignDispoFilter');
+    const applyCampaignFiltersBtn = document.getElementById('applyCampaignFiltersBtn');
+    const campaignMetricsStatus = document.getElementById('campaignMetricsStatus');
+    const campaignMetricsSummary = document.getElementById('campaignMetricsSummary');
+    const campaignDispoTableBody = document.getElementById('campaignDispoTableBody');
+    const campaignAgentTableBody = document.getElementById('campaignAgentTableBody');
+    const machineToggle = document.getElementById('toggleMachineDetection');
+    const recordingToggle = document.getElementById('toggleCallRecording');
+    const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+    const settingsStatus = document.getElementById('settingsStatus');
+    const slotFormArea = document.getElementById('slotFormArea');
+    const slotCount = document.getElementById('slotCount');
+    const slotTableBody = document.getElementById('slotTableBody');
+    const slotIdInput = document.getElementById('slotIdInput');
+    const slotNameInput = document.getElementById('slotNameInput');
+    const slotDialInput = document.getElementById('slotDialInput');
+    const slotInboundInput = document.getElementById('slotInboundInput');
+    const slotStatus = document.getElementById('slotStatus');
+    const saveSlotBtn = document.getElementById('saveSlotBtn');
+    const deleteSlotBtn = document.getElementById('deleteSlotBtn');
+    const resetSlotBtn = document.getElementById('resetSlotBtn');
+    const lpAreaInput = document.getElementById('lpAreaInput');
+    const lpNumberInput = document.getElementById('lpNumberInput');
+    const lpStatus = document.getElementById('lpStatus');
+    const addLpBtn = document.getElementById('addLpBtn');
+    const clearLpBtn = document.getElementById('clearLpBtn');
+    const lpTableBody = document.getElementById('lpTableBody');
+
+    const metricOnlineAgents = document.getElementById('metricOnlineAgents');
+    const metricTotalAgents = document.getElementById('metricTotalAgents');
+    const metricOfflineAgents = document.getElementById('metricOfflineAgents');
+    const metricCalls = document.getElementById('metricCalls');
+    const metricLive = document.getElementById('metricLive');
+    const metricConversions = document.getElementById('metricConversions');
+    const metricLiveRate = document.getElementById('metricLiveRate');
+    const metricAvgDuration = document.getElementById('metricAvgDuration');
+    const metricLastDuration = document.getElementById('metricLastDuration');
+    const localUploadCard = document.getElementById('localUploadCard');
+    const localCampaignSelect = document.getElementById('localCampaignSelect');
+    const localModeSelect = document.getElementById('localModeSelect');
+    const localFileInput = document.getElementById('localFileInput');
+    const localUploadBtn = document.getElementById('localUploadBtn');
+    const localUploadStatus = document.getElementById('localUploadStatus');
+
+    function setStatus(el, msg, ok = true) {
+      el.textContent = msg || "";
+      el.classList.remove('status-ok', 'status-err');
+      if (!msg) return;
+      el.classList.add(ok ? 'status-ok' : 'status-err');
+    }
+
+    async function adminFetch(path, options = {}) {
+      const res = await fetch(path, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(adminKey ? { 'x-admin-key': adminKey } : {}),
+          ...(options.headers || {})
+        }
+      });
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (e) {
+        data = {};
+      }
+      const ok = res.ok && data.ok !== false;
+      return { ok, data };
+    }
+
+    function formatDuration(seconds) {
+      const s = Math.max(0, Math.round(Number(seconds) || 0));
+      if (s < 60) return `${s}s`;
+      const mins = Math.floor(s / 60);
+      const rem = s % 60;
+      if (!rem) return `${mins}m`;
+      return `${mins}m ${rem}s`;
+    }
+
+    function formatStatusDuration(seconds) {
+      if (seconds == null || Number.isNaN(seconds)) return 'No recent dials';
+      const s = Math.max(0, Math.round(Number(seconds)));
+      if (s < 60) return `${s}s`;
+      if (s < 3600) return `${Math.floor(s / 60)}m`;
+      const hours = Math.floor(s / 3600);
+      const minutes = Math.floor((s % 3600) / 60);
+      if (!minutes) return `${hours}h`;
+      return `${hours}h ${minutes}m`;
+    }
+
+    function statusBadge(statusInfo) {
+      const s = ((statusInfo && statusInfo.status) || 'offline').toLowerCase();
+      const durationText = formatStatusDuration(statusInfo ? statusInfo.duration : null);
+      let cls = 'status-badge status-offline';
+      let label = `Offline · ${durationText}`;
+
+      if (s === 'online' || s === 'active') {
+        cls = 'status-badge status-active';
+        label = 'Online';
+      } else if (s === 'away' || s === 'idle') {
+        cls = 'status-badge status-idle';
+        label = `Away · ${durationText}`;
+      }
+
+      return `
+        <span class="${cls}">
+          <span class="status-dot"></span>
+          ${label}
+        </span>
+      `;
+    }
+
+    function getDispositionLabel(key) {
+      if (!key) return 'Unknown';
+      return DISPOSITION_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+
+    function slugifyTag(text = '') {
+      return (text || '')
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'campaign';
+    }
+
+    async function loadDialerSettings() {
+      if (!adminKey || !settingsCard) return;
+      const { ok, data } = await adminFetch('/api/admin/settings');
+      if (!ok) {
+        setStatus(settingsStatus, data.error || 'Unable to load settings.', false);
+        return;
+      }
+      const settings = data.settings || {};
+      if (machineToggle) machineToggle.checked = !!settings.machineDetectionEnabled;
+      if (recordingToggle) recordingToggle.checked = !!settings.callRecordingEnabled;
+      setStatus(settingsStatus, 'Settings loaded.', true);
+    }
+
+    async function saveDialerSettings() {
+      if (!adminKey) {
+        setStatus(settingsStatus, 'Unlock admin first.', false);
+        return;
+      }
+      saveSettingsBtn.disabled = true;
+      setStatus(settingsStatus, 'Saving settings…', true);
+      const payload = {
+        machineDetectionEnabled: machineToggle?.checked || false,
+        callRecordingEnabled: recordingToggle?.checked || false
+      };
+      const { ok, data } = await adminFetch('/api/admin/settings', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (!ok) {
+        setStatus(settingsStatus, data.error || 'Failed to save settings.', false);
+      } else {
+        setStatus(settingsStatus, 'Settings updated.', true);
+      }
+      saveSettingsBtn.disabled = false;
+    }
+
+    async function loadCampaigns() {
+      if (!adminKey) return;
+      const { ok, data } = await adminFetch('/api/admin/campaigns');
+      if (!ok) {
+        campaignsTableBody.innerHTML = `
+          <tr><td colspan="8" style="padding:8px; color:#fecaca;">
+            Failed to load campaigns.
+          </td></tr>
+        `;
+        return;
+      }
+      campaignMap = data.campaigns || {};
+      const list = Object.values(campaignMap);
+      campaignCount.textContent = list.length;
+      campaignsTableBody.innerHTML = "";
+      if (!list.length) {
+        campaignsTableBody.innerHTML = `
+          <tr><td colspan="8" style="padding:8px; color:var(--text-soft);">
+            No campaigns configured yet.
+          </td></tr>
+        `;
+      } else {
+        list.forEach(c => {
+          const total = typeof c.computedTotalLeads === 'number'
+            ? c.computedTotalLeads
+            : (typeof c.totalLeads === 'number' ? c.totalLeads : '—');
+          const remaining = typeof c.computedRemainingLeads === 'number' ? c.computedRemainingLeads : '—';
+          const pipelineLabel = getPipelineLabel(c.ghlPipelineId);
+          const stageLabel = getStageLabel(c.ghlPipelineId, c.ghlStageId);
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${c.id}</td>
+            <td>${c.name}</td>
+            <td>${pipelineLabel}</td>
+            <td>${stageLabel}</td>
+            <td>${c.ghlTag || '—'}</td>
+            <td>${total}</td>
+            <td>${remaining}</td>
+            <td>
+              <div class="actions-cell">
+                <button class="btn btn-secondary btn-mini" onclick="editCampaign('${c.id}')">Edit</button>
+                <button class="btn btn-danger btn-mini" onclick="deleteCampaign('${c.id}')">Delete</button>
+              </div>
+            </td>
+          `;
+          campaignsTableBody.appendChild(tr);
+        });
+      }
+      renderCampaignOptions(list);
+    }
+
+    function renderCampaignOptions(list) {
+      if (userCampaignSelect) {
+        const current = userCampaignSelect.value;
+        userCampaignSelect.innerHTML = '<option value="">No campaign</option>';
+        list.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = c.name;
+          if (c.id === current) opt.selected = true;
+          userCampaignSelect.appendChild(opt);
+        });
+      }
+      if (localCampaignSelect) {
+        const currentLocal = localCampaignSelect.value;
+        localCampaignSelect.innerHTML = '<option value="">Select campaign…</option>';
+        list.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = c.name;
+          if (c.id === currentLocal) opt.selected = true;
+          localCampaignSelect.appendChild(opt);
+        });
+      }
+      if (campaignMetricsSelect) {
+        const selected = campaignMetricsSelect.value;
+        campaignMetricsSelect.innerHTML = '<option value="">Select campaign…</option>';
+        list.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = c.name;
+          if (c.id === selected) opt.selected = true;
+          campaignMetricsSelect.appendChild(opt);
+        });
+      }
+    }
+
+    function renderAgentFilterOptions() {
+      if (!campaignAgentFilter) return;
+      const selected = Array.from(campaignAgentFilter.selectedOptions).map(opt => opt.value);
+      campaignAgentFilter.innerHTML = '';
+      const agentIds = Object.keys(statusByAgent || {}).sort();
+      agentIds.forEach(id => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = id;
+        if (selected.includes(id)) opt.selected = true;
+        campaignAgentFilter.appendChild(opt);
+      });
+    }
+
+    function renderDispositionFilterOptions(dispositionsList) {
+      if (!campaignDispoFilter) return;
+      const options = dispositionsList && dispositionsList.length
+        ? dispositionsList
+        : Object.keys(DISPOSITION_LABELS);
+      const selected = Array.from(campaignDispoFilter.selectedOptions).map(opt => opt.value);
+      campaignDispoFilter.innerHTML = '';
+      options.forEach(key => {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = getDispositionLabel(key);
+        if (selected.includes(key)) opt.selected = true;
+        campaignDispoFilter.appendChild(opt);
+      });
+    }
+
+    function getPipelineLabel(pipelineId) {
+      if (!pipelineId) return '—';
+      const pipeline = (ghlPipelines || []).find(p => p.id === pipelineId);
+      return (pipeline && pipeline.name) || pipelineId;
+    }
+
+    function getStageLabel(pipelineId, stageId) {
+      if (!pipelineId || !stageId) return '—';
+      const pipeline = (ghlPipelines || []).find(p => p.id === pipelineId);
+      const stage = pipeline && Array.isArray(pipeline.stages)
+        ? pipeline.stages.find(s => s.id === stageId)
+        : null;
+      return (stage && stage.name) || stageId;
+    }
+
+    function parseCsvLines(text) {
+      return text
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => line.split(',').map(col => col.trim().replace(/^"|"$/g, '')));
+    }
+
+    function csvToObjects(text) {
+      const rows = parseCsvLines(text);
+      if (!rows.length) return [];
+      const headers = rows.shift().map(h => h.toLowerCase());
+      return rows.map(cols => {
+        const obj = {};
+        headers.forEach((h, idx) => {
+          obj[h] = cols[idx] || '';
+        });
+        obj.phone = obj.phone || obj.phonenumber || '';
+        obj.firstName = obj.firstname || obj['first name'] || obj.first_name || '';
+        obj.lastName = obj.lastname || obj['last name'] || obj.last_name || '';
+        obj.company = obj.company || obj.companyname || obj['company name'] || '';
+        obj.email = obj.email || obj.emailaddress || obj['email address'] || '';
+        obj.city = obj.city || '';
+        obj.state = obj.state || obj.region || '';
+        return obj;
+      });
+    }
+
+    function updateLeadPreview(total, remaining) {
+      if (!campaignLeadPreviewText) return;
+      if (typeof total === 'number' && !Number.isNaN(total)) {
+        let text = `Total synced leads: ${total.toLocaleString()}`;
+        if (typeof remaining === 'number' && !Number.isNaN(remaining)) {
+          text += ` • Remaining: ${remaining.toLocaleString()}`;
+        }
+        campaignLeadPreviewText.textContent = text;
+      } else {
+        campaignLeadPreviewText.textContent = 'Synced automatically from GoHighLevel once the campaign loads.';
+      }
+    }
+
+    async function loadGhlPipelines() {
+      if (!adminKey || !campaignPipelineSelect) return;
+      try {
+        const { ok, data } = await adminFetch('/api/admin/ghl/pipelines');
+        if (!ok) {
+          renderPipelineSelect();
+          setStatus(campaignStatus, data.error || 'Failed to load GHL pipelines.', false);
+          return;
+        }
+        ghlPipelines = data.pipelines || [];
+        setStatus(campaignStatus, '', true);
+        const currentPipeline = campaignPipelineSelect ? campaignPipelineSelect.value : '';
+        const currentStage = campaignStageSelect ? campaignStageSelect.value : '';
+        renderPipelineSelect(currentPipeline, currentStage);
+      } catch (err) {
+        console.error('loadGhlPipelines error', err);
+        renderPipelineSelect();
+        setStatus(campaignStatus, 'Unable to load GHL pipelines.', false);
+      }
+    }
+
+    async function loadGhlTags() {
+      if (!adminKey || !campaignTagSelect) return;
+      try {
+        const { ok, data } = await adminFetch('/api/admin/ghl/tags');
+        if (!ok) {
+          campaignTagSelect.innerHTML = '<option value="">Unable to load tags</option>';
+          campaignTagSelect.disabled = true;
+          return;
+        }
+        ghlTags = data.tags || [];
+        renderTagSelect();
+      } catch (err) {
+        console.error('loadGhlTags error', err);
+        campaignTagSelect.innerHTML = '<option value="">Unable to load tags</option>';
+        campaignTagSelect.disabled = true;
+      }
+    }
+
+    function renderTagSelect(selectedTag = '') {
+      if (!campaignTagSelect) return;
+      campaignTagSelect.innerHTML = '<option value="">Select tag…</option>';
+      ghlTags.forEach(tag => {
+        const name = tag.name || tag.tag || tag.id;
+        const value = name || '';
+        if (!value) return;
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = name;
+        campaignTagSelect.appendChild(opt);
+      });
+      campaignTagSelect.disabled = !ghlTags.length;
+      const storedTag = localStorage.getItem('rehash.defaultTag');
+      let choice = selectedTag || storedTag;
+      if (choice && !ghlTags.some(tag => (tag.name || tag.tag) === choice)) {
+        choice = '';
+      }
+      if (!choice && ghlTags.length) {
+        choice = ghlTags[0].name || ghlTags[0].tag || '';
+      }
+      campaignTagSelect.value = choice || '';
+      applyTagSelection(campaignTagSelect.value);
+    }
+
+    function applyTagSelection(tagValue) {
+      if (!campaignTagInput) return;
+      if (!tagValue) {
+        campaignTagInput.value = '';
+        campaignIdInput.value = '';
+        campaignNameInput.value = '';
+        updateLeadPreview();
+        return;
+      }
+      campaignTagInput.value = tagValue;
+      const slug = slugifyTag(tagValue);
+      campaignIdInput.value = slug;
+      campaignNameInput.value = tagValue;
+      const existing = slug && campaignMap ? campaignMap[slug] : null;
+      if (existing) {
+        const previewTotal = typeof existing.computedTotalLeads === 'number'
+          ? existing.computedTotalLeads
+          : (typeof existing.totalLeads === 'number' ? existing.totalLeads : null);
+        const previewRemaining = typeof existing.computedRemainingLeads === 'number'
+          ? existing.computedRemainingLeads
+          : null;
+        updateLeadPreview(previewTotal, previewRemaining);
+        renderPipelineSelect(existing.ghlPipelineId || '', existing.ghlStageId || '');
+      } else {
+        updateLeadPreview();
+        renderPipelineSelect();
+      }
+    }
+
+    function renderPipelineSelect(selectedPipelineId = '', selectedStageId = '') {
+      if (!campaignPipelineSelect) return;
+      campaignPipelineSelect.innerHTML = '<option value="">Select pipeline…</option>';
+      ghlPipelines.forEach(pipeline => {
+        const opt = document.createElement('option');
+        opt.value = pipeline.id;
+        opt.textContent = pipeline.name || pipeline.id;
+        campaignPipelineSelect.appendChild(opt);
+      });
+      campaignPipelineSelect.disabled = !ghlPipelines.length;
+      const storedPipeline = localStorage.getItem('rehash.defaultPipelineId') || '';
+      let pipelineChoice = selectedPipelineId || storedPipeline;
+      if (!pipelineChoice && ghlPipelines.length) {
+        const normalized = (name) => (name || '').toLowerCase();
+        const exactMatch = ghlPipelines.find(p =>
+          DEFAULT_PIPELINE_NAMES.some(target => normalized(p.name) === target)
+        );
+        const fuzzyMatch = ghlPipelines.find(p =>
+          DEFAULT_PIPELINE_NAMES.some(target => normalized(p.name).includes(target))
+        );
+        const fallback = ghlPipelines[0];
+        pipelineChoice = (exactMatch || fuzzyMatch || fallback)?.id || '';
+      }
+      if (pipelineChoice && ghlPipelines.some(p => p.id === pipelineChoice)) {
+        campaignPipelineSelect.value = pipelineChoice;
+        const storedPipelineValid = storedPipeline && ghlPipelines.some(p => p.id === storedPipeline);
+        if (!storedPipelineValid) {
+          localStorage.setItem('rehash.defaultPipelineId', pipelineChoice);
+        }
+      } else {
+        campaignPipelineSelect.value = '';
+      }
+      const storedStage = localStorage.getItem('rehash.defaultStageId') || '';
+      const stageChoice = selectedStageId || storedStage;
+      renderStageSelect(campaignPipelineSelect.value, stageChoice);
+    }
+
+    function renderStageSelect(pipelineId, selectedStageId = '') {
+      if (!campaignStageSelect) return;
+      if (!pipelineId) {
+        campaignStageSelect.innerHTML = '<option value="">Select pipeline first</option>';
+        campaignStageSelect.disabled = true;
+        return;
+      }
+      const pipeline = ghlPipelines.find(p => p.id === pipelineId);
+      campaignStageSelect.innerHTML = '<option value="">Select stage…</option>';
+      (pipeline?.stages || []).forEach(stage => {
+        const opt = document.createElement('option');
+        opt.value = stage.id;
+        opt.textContent = stage.name || stage.id;
+        campaignStageSelect.appendChild(opt);
+      });
+      campaignStageSelect.disabled = !(pipeline && pipeline.stages && pipeline.stages.length);
+      const stages = pipeline?.stages || [];
+      const storedStage = localStorage.getItem('rehash.defaultStageId') || '';
+      let chosenStageId = '';
+      const explicitStageSelected = Boolean(selectedStageId && stages.some(s => s.id === selectedStageId));
+      if (explicitStageSelected) {
+        chosenStageId = selectedStageId;
+      } else {
+        if (storedStage && stages.some(s => s.id === storedStage)) {
+          chosenStageId = storedStage;
+        } else if (stages.length) {
+          const normalized = (name) => (name || '').toLowerCase();
+          const exactMatch = stages.find(stage =>
+            DEFAULT_STAGE_NAMES.some(target => normalized(stage.name) === target)
+          );
+          const fuzzyMatch = stages.find(stage =>
+            DEFAULT_STAGE_NAMES.some(target => normalized(stage.name).includes(target))
+          );
+          const fallback = stages[0];
+          chosenStageId = (exactMatch || fuzzyMatch || fallback)?.id || '';
+        }
+      }
+      campaignStageSelect.value = chosenStageId || '';
+      const storedStageValid = storedStage && stages.some(s => s.id === storedStage);
+      if (!explicitStageSelected && chosenStageId && !storedStageValid) {
+        localStorage.setItem('rehash.defaultStageId', chosenStageId);
+      }
+    }
+
+    async function loadAgentSlots() {
+      if (!adminKey) return;
+      const { ok, data } = await adminFetch('/api/admin/slots');
+      if (!ok) {
+        setStatus(campaignStatus, data.error || 'Failed to load dial slots.', false);
+        return;
+      }
+      agentSlotMap = data.slots || {};
+      renderDialSlotOptions();
+      renderSlotTable();
+      updateSlotCount();
+    }
+
+    function renderDialSlotOptions() {
+      if (!userDialSlotSelect) return;
+      const current = userDialSlotSelect.value;
+      userDialSlotSelect.innerHTML = '<option value="">Select slot…</option>';
+      Object.values(agentSlotMap).forEach(slot => {
+        const opt = document.createElement('option');
+        opt.value = slot.id;
+        opt.textContent = slot.name;
+        if (slot.id === current) opt.selected = true;
+        userDialSlotSelect.appendChild(opt);
+      });
+    }
+
+    function getDialSlotLabel(slotId) {
+      if (!slotId) return '—';
+      return (agentSlotMap[slotId] && agentSlotMap[slotId].name) || slotId;
+    }
+
+    function updateSlotCount() {
+      const count = Object.keys(userMap || {}).length || Object.keys(agentSlotMap || {}).length;
+      if (slotCount) slotCount.textContent = count;
+    }
+
+    function renderSlotTable() {
+      if (!slotTableBody) return;
+      const users = Object.keys(userMap || {});
+      const slots = Object.values(agentSlotMap || {});
+      const rows = users.length ? users : slots.map(s => s.id);
+      if (!rows.length) {
+        slotTableBody.innerHTML = `<tr><td colspan="4" style="padding:10px 8px; color:var(--text-soft);">No users or slots yet.</td></tr>`;
+        return;
+      }
+      slotTableBody.innerHTML = rows.map(id => {
+        const slot = agentSlotMap[id] || { id, dialTarget: '', inboundNumber: '' };
+        const outbound = slot.dialTarget || '—';
+        const inbound = slot.inboundNumber || '—';
+        return `
+          <tr>
+            <td>${id || '—'}</td>
+            <td>${outbound}</td>
+            <td>${inbound}</td>
+            <td style="white-space:nowrap;">
+              <button class="btn btn-secondary btn-small" data-slot-edit="${id}">Edit</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+      slotTableBody.querySelectorAll('[data-slot-edit]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-slot-edit');
+          const slot = agentSlotMap[id];
+          const fallback = { id, name: id, dialTarget: '', inboundNumber: '' };
+          const s = slot || fallback;
+          slotIdInput.value = s.id || '';
+          slotNameInput.value = s.name || '';
+          slotDialInput.value = s.dialTarget || '';
+          slotInboundInput.value = s.inboundNumber || '';
+          setStatus(slotStatus, `Loaded slot ${id}.`, true);
+        });
+      });
+    }
+
+    async function handleCreateCampaign() {
+      if (!adminKey) {
+        setStatus(campaignStatus, 'Unlock admin first.', false);
+        return;
+      }
+      const id = (campaignIdInput.value || '').trim();
+      const name = (campaignNameInput.value || '').trim();
+      const ghlPipelineId = campaignPipelineSelect ? campaignPipelineSelect.value : '';
+      const ghlStageId = campaignStageSelect ? campaignStageSelect.value : '';
+      const ghlTag = (campaignTagInput.value || '').trim();
+      if (!id || !name || !ghlTag) {
+        setStatus(campaignStatus, 'Select a GHL tag/pipeline before saving.', false);
+        return;
+      }
+      setStatus(campaignStatus, 'Saving campaign…', true);
+      const { ok, data } = await adminFetch('/api/admin/campaigns', {
+        method: 'POST',
+        body: JSON.stringify({ id, name, ghlPipelineId, ghlStageId, ghlTag })
+      });
+      if (!ok) {
+        setStatus(campaignStatus, data.error || 'Failed to save campaign.', false);
+        return;
+      }
+      setStatus(campaignStatus, 'Campaign created.', true);
+      campaignIdInput.value = '';
+      campaignNameInput.value = '';
+      renderPipelineSelect();
+      renderTagSelect(localStorage.getItem('rehash.defaultTag') || '');
+      campaignTagInput.value = '';
+      updateLeadPreview();
+      await loadCampaigns();
+    }
+
+    async function handleUpdateCampaign() {
+      if (!adminKey) {
+        setStatus(campaignStatus, 'Unlock admin first.', false);
+        return;
+      }
+      const id = (campaignIdInput.value || '').trim();
+      if (!id) {
+        setStatus(campaignStatus, 'Enter campaign ID to update.', false);
+        return;
+      }
+      const payload = {};
+      if (campaignNameInput.value) payload.name = campaignNameInput.value.trim();
+      payload.ghlPipelineId = campaignPipelineSelect ? campaignPipelineSelect.value : '';
+      payload.ghlStageId = campaignStageSelect ? campaignStageSelect.value : '';
+      payload.ghlTag = (campaignTagInput.value || '').trim();
+      setStatus(campaignStatus, 'Updating campaign…', true);
+      const { ok, data } = await adminFetch(`/api/admin/campaigns/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+      if (!ok) {
+        setStatus(campaignStatus, data.error || 'Failed to update campaign.', false);
+        return;
+      }
+      setStatus(campaignStatus, 'Campaign updated.', true);
+      await loadCampaigns();
+    }
+
+    window.editCampaign = (id) => {
+      const campaign = campaignMap[id];
+      if (!campaign) return;
+      campaignIdInput.value = campaign.id;
+      campaignNameInput.value = campaign.name;
+      renderPipelineSelect(campaign.ghlPipelineId || '', campaign.ghlStageId || '');
+      renderTagSelect(campaign.ghlTag || localStorage.getItem('rehash.defaultTag') || '');
+      campaignTagInput.value = campaign.ghlTag || '';
+      const previewTotal = typeof campaign.computedTotalLeads === 'number'
+        ? campaign.computedTotalLeads
+        : (typeof campaign.totalLeads === 'number' ? campaign.totalLeads : null);
+      const previewRemaining = typeof campaign.computedRemainingLeads === 'number'
+        ? campaign.computedRemainingLeads
+        : null;
+      updateLeadPreview(previewTotal, previewRemaining);
+      if (campaignStatus) {
+        setStatus(campaignStatus, `Editing ${campaign.id}`, true);
+      }
+    };
+
+    window.deleteCampaign = async (id) => {
+      if (!adminKey) return;
+      const confirmed = window.confirm(`Delete campaign "${id}"?`);
+      if (!confirmed) return;
+      const { ok, data } = await adminFetch(`/api/admin/campaigns/${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      });
+      if (!ok) {
+        setStatus(campaignStatus, data.error || 'Failed to delete campaign.', false);
+        return;
+      }
+      setStatus(campaignStatus, 'Campaign deleted.', true);
+      await loadCampaigns();
+    };
+
+    async function loadCampaignMetrics() {
+      if (!adminKey || !campaignMetricsSelect) {
+        setStatus(campaignMetricsStatus, 'Unlock admin first.', false);
+        return;
+      }
+      const campaignId = campaignMetricsSelect.value;
+      if (!campaignId) {
+        setStatus(campaignMetricsStatus, 'Select a campaign.', false);
+        return;
+      }
+      setStatus(campaignMetricsStatus, 'Loading metrics…', true);
+      const params = new URLSearchParams({ campaignId });
+      const agents = campaignAgentFilter
+        ? Array.from(campaignAgentFilter.selectedOptions).map(opt => opt.value).filter(Boolean)
+        : [];
+      const dispositions = campaignDispoFilter
+        ? Array.from(campaignDispoFilter.selectedOptions).map(opt => opt.value).filter(Boolean)
+        : [];
+      if (agents.length) params.append('agents', agents.join(','));
+      if (dispositions.length) params.append('dispositions', dispositions.join(','));
+      const { ok, data } = await adminFetch(`/api/admin/campaign-metrics?${params.toString()}`);
+      if (!ok) {
+        setStatus(campaignMetricsStatus, data.error || 'Failed to load metrics.', false);
+        return;
+      }
+      const campaign = data.campaign || {};
+      setStatus(campaignMetricsStatus, `Metrics refreshed for ${campaign.name || campaign.id}`, true);
+      renderDispositionFilterOptions(data.dispositions);
+      const totals = data.totals || {};
+      const filteredTotals = data.filteredTotals || totals;
+      const remaining = data.remainingLeads || 0;
+      const totalLeads = campaign.totalLeads || 0;
+      campaignMetricsSummary.textContent = `Total leads: ${totalLeads} • Logged: ${totals.total || 0} • Remaining: ${remaining}`;
+
+      campaignDispoTableBody.innerHTML = '';
+      const dispoEntries = Object.entries(filteredTotals).filter(([key]) => key !== 'total');
+      if (!dispoEntries.length) {
+        campaignDispoTableBody.innerHTML = `
+          <tr><td colspan="2" style="padding:8px; color:var(--text-soft);">No dispositions logged with current filters.</td></tr>
+        `;
+      } else {
+        dispoEntries.forEach(([key, count]) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${getDispositionLabel(key)}</td><td>${count}</td>`;
+          campaignDispoTableBody.appendChild(tr);
+        });
+      }
+
+      campaignAgentTableBody.innerHTML = '';
+      const agentsData = data.agentBreakdown || [];
+      if (!agentsData.length) {
+        campaignAgentTableBody.innerHTML = `
+          <tr><td colspan="3" style="padding:8px; color:var(--text-soft);">No agent activity with current filters.</td></tr>
+        `;
+      } else {
+        agentsData.forEach(agent => {
+          const counts = agent.counts || {};
+          const breakdown = Object.entries(counts)
+            .map(([key, val]) => `${getDispositionLabel(key)}: ${val}`)
+            .join(', ');
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${agent.agentId}</td>
+            <td>${agent.total || 0}</td>
+            <td>${breakdown || '—'}</td>
+          `;
+          campaignAgentTableBody.appendChild(tr);
+        });
+      }
+    }
+
+    async function loadLeaderboard() {
+      try {
+        const res = await fetch('/api/leaderboard');
+        const data = await res.json();
+
+        const top = Array.isArray(data.top) ? data.top : [];
+        const totalAgentsVal = data.totalAgents || 0;
+        const onlineCount = data.onlineAgents || 0;
+        const awayCount = data.awayAgents || 0;
+        const offlineCount = data.offlineAgents || 0;
+        const avgCallDurationSec = data.avgCallDurationSec || 0;
+        const lastCallDurationSec = data.lastCallDurationSec || 0;
+
+        statusByAgent = {};
+        top.forEach(row => {
+          statusByAgent[row.agentId] = {
+            status: row.status || 'offline',
+            duration: row.statusDurationSec || null
+          };
+        });
+        renderAgentFilterOptions();
+
+        leaderboardBody.innerHTML = "";
+
+        if (!top.length) {
+          leaderboardBody.innerHTML = `
+            <tr>
+              <td colspan="8" style="padding:8px; color:var(--text-soft);">
+                No metrics yet. Once agents start calling, metrics will appear here.
+              </td>
+            </tr>
+          `;
+        } else {
+          top.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.className = row.rank === 1 ? 'highlight-row' : '';
+            tr.innerHTML = `
+              <td>${row.agentId}</td>
+              <td>${statusBadge(statusByAgent[row.agentId])}</td>
+              <td>${row.totalCalls}</td>
+              <td>${row.live}</td>
+              <td>${row.conversions}</td>
+              <td>${formatDuration(row.avgCallDurationSec)}</td>
+              <td>${formatDuration(row.lastCallDurationSec)}</td>
+              <td>#${row.rank}</td>
+            `;
+            leaderboardBody.appendChild(tr);
+          });
+        }
+
+        // aggregate metrics
+        let totalCalls = 0;
+        let totalLive = 0;
+        let totalConversions = 0;
+        top.forEach(row => {
+          totalCalls += row.totalCalls || 0;
+          totalLive += row.live || 0;
+          totalConversions += row.conversions || 0;
+        });
+
+        metricOnlineAgents.textContent = onlineCount;
+        metricTotalAgents.textContent = `${totalAgentsVal} total slots`;
+        metricOfflineAgents.textContent = `${offlineCount} offline · ${awayCount} away`;
+        metricCalls.textContent = totalCalls;
+        metricLive.textContent = totalLive;
+        metricConversions.textContent = totalConversions;
+        if (metricAvgDuration) {
+          metricAvgDuration.textContent = formatDuration(avgCallDurationSec);
+        }
+        if (metricLastDuration) {
+          metricLastDuration.textContent = formatDuration(lastCallDurationSec);
+        }
+
+        const liveRate = totalCalls > 0 ? Math.round((totalLive / totalCalls) * 100) : 0;
+        metricLiveRate.textContent = `${liveRate}% connect`;
+      } catch (err) {
+        leaderboardBody.innerHTML = `
+          <tr><td colspan="8" style="padding:8px; color:#fecaca;">
+            Failed to load metrics.
+          </td></tr>
+        `;
+      }
+    }
+
+    async function loadUsers() {
+      if (!adminKey) return;
+      const { ok, data } = await adminFetch('/api/admin/users');
+      if (!ok) {
+        setStatus(userStatus, data.error || 'Failed to load users', false);
+        usersTableBody.innerHTML = `
+          <tr>
+            <td colspan="7" style="padding:8px; color:#fecaca;">
+              Could not load users. Check admin password or backend.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      const users = data.users || {};
+      const entries = Object.entries(users);
+      userMap = users;
+      usersCount.textContent = entries.length;
+
+      usersTableBody.innerHTML = "";
+      if (!entries.length) {
+        usersTableBody.innerHTML = `
+          <tr>
+            <td colspan="7" style="padding:8px; color:var(--text-soft);">
+              No users yet. Create your first outbound seat above.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      entries.forEach(([username, info]) => {
+        const statusInfo = statusByAgent[username] || { status: 'offline', duration: null };
+        const campaignId = info.campaignId || '';
+        const campaignLabel = campaignId ? (campaignMap[campaignId]?.name || campaignId) : '—';
+        const dialSlotLabel = getDialSlotLabel(info.dialSlot || username);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${username}</td>
+          <td>${info.role || 'agent'}</td>
+          <td>${statusBadge(statusInfo)}</td>
+          <td>${campaignLabel}</td>
+          <td>${dialSlotLabel}</td>
+          <td>${info.password || ''}</td>
+          <td>
+            <div class="actions-cell">
+              <button class="btn btn-secondary btn-mini"
+                onclick="fillUserForm('${username.replace(/'/g, "\\'")}', '${(info.password || '').replace(/'/g, "\\'")}', '${(info.role || 'agent').replace(/'/g, "\\'")}', '${campaignId.replace(/'/g, "\\'")}', '${(info.dialSlot || '').replace(/'/g, "\\'")}')">
+                Edit
+              </button>
+              <button class="btn btn-danger btn-mini"
+                onclick="deleteUser('${username.replace(/'/g, "\\'")}')">
+                Delete
+              </button>
+            </div>
+          </td>
+        `;
+        usersTableBody.appendChild(tr);
+      });
+
+      renderSlotTable();
+      updateSlotCount();
+    }
+
+    // expose for onclick
+    window.fillUserForm = (username, password, role, campaignId, dialSlot) => {
+      usernameInput.value = username;
+      newUsernameInput.value = "";
+      passwordInput.value = password;
+      roleSelect.value = role || 'agent';
+      if (userCampaignSelect) {
+        userCampaignSelect.value = campaignId || '';
+      }
+      if (userDialSlotSelect) {
+        userDialSlotSelect.value = dialSlot || '';
+      }
+      setStatus(userStatus, "");
+    };
+
+    window.deleteUser = async (username) => {
+      if (!adminKey) return;
+      const confirmDelete = window.confirm(`Delete user "${username}"?`);
+      if (!confirmDelete) return;
+
+      const { ok, data } = await adminFetch(`/api/admin/users/${encodeURIComponent(username)}`, {
+        method: 'DELETE'
+      });
+
+      if (!ok) {
+        setStatus(userStatus, data.error || 'Failed to delete user', false);
+      } else {
+        setStatus(userStatus, 'User deleted.', true);
+        await loadLeaderboard();
+        await loadUsers();
+      }
+    };
+
+    async function handleAdminLogin() {
+      const pwd = adminPasswordInput.value.trim();
+      if (!pwd) {
+        setStatus(loginStatus, 'Enter admin password.', false);
+        return;
+      }
+
+      adminLoginBtn.disabled = true;
+      setStatus(loginStatus, 'Checking password...', true);
+
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pwd })
+        });
+        const data = await res.json();
+
+        if (!res.ok || data.ok === false) {
+          setStatus(loginStatus, data.error || 'Invalid admin password', false);
+          adminLoginBtn.disabled = false;
+          return;
+        }
+
+        adminKey = pwd;
+        setStatus(loginStatus, 'Admin unlocked.', true);
+
+        metricsRow.classList.remove('hidden');
+        mainContent.classList.remove('hidden');
+        userFormArea.classList.remove('hidden');
+        if (settingsCard) settingsCard.classList.remove('hidden');
+        if (campaignFormArea) campaignFormArea.classList.remove('hidden');
+        if (campaignMetricsCard) campaignMetricsCard.classList.remove('hidden');
+        if (localUploadCard) localUploadCard.classList.remove('hidden');
+        if (localUploadCard) localUploadCard.classList.remove('hidden');
+        if (localUploadCard) localUploadCard.classList.remove('hidden');
+        if (slotFormArea) slotFormArea.classList.remove('hidden');
+
+        await loadAgentSlots();
+        await loadGhlPipelines();
+        await loadGhlTags();
+        await loadCampaigns();
+        await loadLeaderboard();
+        await loadUsers();
+        await loadDialerSettings();
+        await loadLocalPresence();
+
+        // refresh metrics & status every 30s while unlocked
+        setInterval(async () => {
+          await loadLeaderboard();
+          await loadCampaigns();
+          await loadUsers();
+        }, 30000);
+      } catch (err) {
+        setStatus(loginStatus, 'Error contacting admin API.', false);
+      } finally {
+        adminLoginBtn.disabled = false;
+      }
+    }
+
+    async function handleCreateUser() {
+      if (!adminKey) {
+        setStatus(userStatus, 'Unlock admin first.', false);
+        return;
+      }
+
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value.trim();
+      const role = roleSelect.value || 'agent';
+      const campaignId = userCampaignSelect ? userCampaignSelect.value : '';
+      const dialSlot = userDialSlotSelect ? userDialSlotSelect.value : '';
+
+      if (!username || !password) {
+        setStatus(userStatus, 'Username and password required.', false);
+        return;
+      }
+
+      const { ok, data } = await adminFetch('/api/admin/users', {
+        method: 'POST',
+        body: JSON.stringify({ username, password, role, campaignId, dialSlot })
+      });
+
+      if (!ok) {
+        setStatus(userStatus, data.error || 'Failed to create user', false);
+      } else {
+        setStatus(userStatus, 'User created.', true);
+        usernameInput.value = "";
+        passwordInput.value = "";
+        newUsernameInput.value = "";
+        roleSelect.value = 'agent';
+        if (userCampaignSelect) userCampaignSelect.value = '';
+        if (userDialSlotSelect) userDialSlotSelect.value = '';
+        await loadLeaderboard();
+        await loadUsers();
+      }
+    }
+
+    async function loadLocalPresence() {
+      if (!adminKey) return;
+      const { ok, data } = await adminFetch('/api/admin/local-presence');
+      if (!ok) {
+        setStatus(lpStatus, data.error || 'Failed to load local presence.', false);
+        return;
+      }
+      localPresenceMap = data.map || {};
+      renderLocalPresenceTable();
+    }
+
+    function renderLocalPresenceTable() {
+      if (!lpTableBody) return;
+      const entries = Object.entries(localPresenceMap || {});
+      if (!entries.length) {
+        lpTableBody.innerHTML = `<tr><td colspan="3" style="padding:10px 8px; color:var(--text-soft);">No local presence numbers yet.</td></tr>`;
+        return;
+      }
+      lpTableBody.innerHTML = entries.map(([area, num]) => `
+        <tr>
+          <td>${area}</td>
+          <td>${num}</td>
+          <td style="white-space:nowrap;">
+            <button class="btn btn-secondary btn-small" data-lp-edit="${area}">Edit</button>
+            <button class="btn btn-danger btn-small" data-lp-delete="${area}">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+      lpTableBody.querySelectorAll('[data-lp-edit]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const area = btn.getAttribute('data-lp-edit');
+          lpAreaInput.value = area;
+          lpNumberInput.value = localPresenceMap[area] || '';
+        });
+      });
+      lpTableBody.querySelectorAll('[data-lp-delete]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const area = btn.getAttribute('data-lp-delete');
+          delete localPresenceMap[area];
+          await saveLocalPresence();
+        });
+      });
+    }
+
+    async function saveLocalPresence() {
+      const { ok, data } = await adminFetch('/api/admin/local-presence', {
+        method: 'PUT',
+        body: JSON.stringify({ map: localPresenceMap })
+      });
+      if (!ok) {
+        setStatus(lpStatus, data.error || 'Failed to save local presence.', false);
+      } else {
+        setStatus(lpStatus, 'Local presence saved.', true);
+        localPresenceMap = data.map || {};
+        renderLocalPresenceTable();
+      }
+    }
+
+    async function handleUpdateUser() {
+      if (!adminKey) {
+        setStatus(userStatus, 'Unlock admin first.', false);
+        return;
+      }
+
+      const username = usernameInput.value.trim();
+      if (!username) {
+        setStatus(userStatus, 'Enter existing username to update.', false);
+        return;
+      }
+
+      const payload = {};
+      const newU = newUsernameInput.value.trim();
+      const pwd = passwordInput.value.trim();
+      const role = roleSelect.value || 'agent';
+      const campaignId = userCampaignSelect ? userCampaignSelect.value : '';
+      const dialSlot = userDialSlotSelect ? userDialSlotSelect.value : '';
+
+      if (newU) payload.newUsername = newU;
+      if (pwd) payload.password = pwd;
+      if (role) payload.role = role;
+      payload.campaignId = campaignId;
+      payload.dialSlot = dialSlot;
+
+      const { ok, data } = await adminFetch(`/api/admin/users/${encodeURIComponent(username)}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+
+      if (!ok) {
+        setStatus(userStatus, data.error || 'Failed to update user', false);
+      } else {
+        setStatus(userStatus, 'User updated.', true);
+        usernameInput.value = "";
+        passwordInput.value = "";
+        newUsernameInput.value = "";
+        roleSelect.value = 'agent';
+        if (userCampaignSelect) userCampaignSelect.value = '';
+        if (userDialSlotSelect) userDialSlotSelect.value = '';
+        await loadLeaderboard();
+        await loadUsers();
+      }
+    }
+
+    adminLoginBtn.addEventListener('click', handleAdminLogin);
+    adminPasswordInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleAdminLogin();
+    });
+
+    function buildSlotPayload() {
+      return {
+        id: (slotIdInput.value || '').trim(),
+        name: (slotNameInput.value || '').trim(),
+        dialTarget: (slotDialInput.value || '').trim(),
+        inboundNumber: (slotInboundInput.value || '').trim()
+      };
+    }
+
+    async function handleSaveSlot() {
+      if (!adminKey) {
+        setStatus(slotStatus, 'Unlock admin first.', false);
+        return;
+      }
+      const payload = buildSlotPayload();
+      if (!payload.id || !payload.dialTarget) {
+        setStatus(slotStatus, 'Slot ID and dial target are required.', false);
+        return;
+      }
+      const exists = Boolean(agentSlotMap[payload.id]);
+      const url = exists ? `/api/admin/slots/${encodeURIComponent(payload.id)}` : '/api/admin/slots';
+      const method = exists ? 'PUT' : 'POST';
+      const { ok, data } = await adminFetch(url, { method, body: JSON.stringify(payload) });
+      if (!ok) {
+        setStatus(slotStatus, data.error || 'Failed to save slot.', false);
+        return;
+      }
+      agentSlotMap = data.slots || {};
+      renderDialSlotOptions();
+      renderSlotTable();
+      updateSlotCount();
+      setStatus(slotStatus, exists ? 'Slot updated.' : 'Slot created.', true);
+    }
+
+    async function handleDeleteSlot() {
+      if (!adminKey) {
+        setStatus(slotStatus, 'Unlock admin first.', false);
+        return;
+      }
+      const id = (slotIdInput.value || '').trim();
+      if (!id) {
+        setStatus(slotStatus, 'Enter a slot ID to delete.', false);
+        return;
+      }
+      const { ok, data } = await adminFetch(`/api/admin/slots/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!ok) {
+        setStatus(slotStatus, data.error || 'Failed to delete slot.', false);
+        return;
+      }
+      agentSlotMap = data.slots || {};
+      renderDialSlotOptions();
+      renderSlotTable();
+      updateSlotCount();
+      slotIdInput.value = '';
+      slotNameInput.value = '';
+      slotDialInput.value = '';
+      slotInboundInput.value = '';
+      setStatus(slotStatus, 'Slot deleted.', true);
+    }
+
+    function handleResetSlotForm() {
+      slotIdInput.value = '';
+      slotNameInput.value = '';
+      slotDialInput.value = '';
+      slotInboundInput.value = '';
+      setStatus(slotStatus, 'Cleared.', true);
+    }
+
+    async function handleAddLocalPresence() {
+      if (!adminKey) {
+        setStatus(lpStatus, 'Unlock admin first.', false);
+        return;
+      }
+      const area = (lpAreaInput.value || '').replace(/[^\d]/g, '').slice(0, 3);
+      const num = (lpNumberInput.value || '').trim();
+      if (!area || !num) {
+        setStatus(lpStatus, 'Area code and number required.', false);
+        return;
+      }
+      localPresenceMap[area] = num;
+      await saveLocalPresence();
+    }
+
+    function handleClearLocalPresenceInputs() {
+      lpAreaInput.value = '';
+      lpNumberInput.value = '';
+    }
+
+    async function handleLocalUpload() {
+      if (!adminKey) {
+        setStatus(localUploadStatus, 'Unlock admin first.', false);
+        return;
+      }
+      const campaignId = localCampaignSelect ? localCampaignSelect.value : '';
+      const mode = localModeSelect ? localModeSelect.value : 'replace';
+      const file = localFileInput.files && localFileInput.files[0];
+      if (!campaignId) {
+        setStatus(localUploadStatus, 'Select a campaign.', false);
+        return;
+      }
+      if (!file) {
+        setStatus(localUploadStatus, 'Choose a lead file to upload.', false);
+        return;
+      }
+      setStatus(localUploadStatus, 'Reading file…', true);
+      try {
+        const text = await file.text();
+        let leads = [];
+        if (file.name.toLowerCase().endsWith('.csv')) {
+          leads = csvToObjects(text);
+        } else {
+          try {
+            const json = JSON.parse(text);
+            leads = Array.isArray(json) ? json : [];
+          } catch {
+            leads = [];
+          }
+        }
+        if (!Array.isArray(leads) || !leads.length) {
+          setStatus(localUploadStatus, 'No leads found in file.', false);
+          return;
+        }
+        setStatus(localUploadStatus, `Uploading ${leads.length} leads…`, true);
+        const { ok, data } = await adminFetch('/api/admin/local-upload', {
+          method: 'POST',
+          body: JSON.stringify({ campaignId, mode, leads })
+        });
+        if (!ok) {
+          setStatus(localUploadStatus, data.error || 'Failed to upload local leads.', false);
+          return;
+        }
+        setStatus(localUploadStatus, `Uploaded ${leads.length} leads.`, true);
+        await loadCampaigns();
+      } catch (err) {
+        console.error('handleLocalUpload error', err);
+        setStatus(localUploadStatus, 'Unable to read file.', false);
+      }
+    }
+
+    document.getElementById('createUserBtn').addEventListener('click', handleCreateUser);
+    document.getElementById('updateUserBtn').addEventListener('click', handleUpdateUser);
+    if (createCampaignBtn) {
+      createCampaignBtn.addEventListener('click', handleCreateCampaign);
+    }
+    if (updateCampaignBtn) {
+      updateCampaignBtn.addEventListener('click', handleUpdateCampaign);
+    }
+    if (applyCampaignFiltersBtn) {
+      applyCampaignFiltersBtn.addEventListener('click', loadCampaignMetrics);
+    }
+    if (saveSlotBtn) saveSlotBtn.addEventListener('click', handleSaveSlot);
+    if (deleteSlotBtn) deleteSlotBtn.addEventListener('click', handleDeleteSlot);
+    if (resetSlotBtn) resetSlotBtn.addEventListener('click', handleResetSlotForm);
+    if (addLpBtn) addLpBtn.addEventListener('click', handleAddLocalPresence);
+    if (clearLpBtn) clearLpBtn.addEventListener('click', handleClearLocalPresenceInputs);
+    if (campaignPipelineSelect) {
+      campaignPipelineSelect.addEventListener('change', e => {
+        const selected = e.target.value;
+        if (selected) {
+          localStorage.setItem('rehash.defaultPipelineId', selected);
+        }
+        renderStageSelect(selected);
+      });
+    }
+    if (campaignStageSelect) {
+      campaignStageSelect.addEventListener('change', e => {
+        if (e.target.value) {
+          localStorage.setItem('rehash.defaultStageId', e.target.value);
+        }
+      });
+    }
+    if (campaignTagSelect) {
+      campaignTagSelect.addEventListener('change', e => {
+        applyTagSelection(e.target.value);
+        if (e.target.value) {
+          localStorage.setItem('rehash.defaultTag', e.target.value);
+        }
+      });
+    }
+    if (localUploadBtn) {
+      localUploadBtn.addEventListener('click', handleLocalUpload);
+    }
+    if (saveSettingsBtn) {
+      saveSettingsBtn.addEventListener('click', saveDialerSettings);
+    }
+    if (localUploadBtn) {
+      localUploadBtn.addEventListener('click', handleLocalUpload);
+    }
+    if (localUploadBtn) {
+      localUploadBtn.addEventListener('click', handleLocalUpload);
+    }
+    renderDispositionFilterOptions();
+    updateLeadPreview();
+    renderPipelineSelect();
+  </script>
+</body>
+</html>

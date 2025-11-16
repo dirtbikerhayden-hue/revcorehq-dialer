@@ -1,0 +1,18 @@
+{
+  "outbound2": {
+    "password": "secret123",
+    "role": "agent"
+  },
+  "HMitchell": {
+    "password": "secret123",
+    "role": "agent",
+    "campaignId": "hayden-custom-test-10",
+    "dialSlot": "outbound1"
+  },
+  "JDoe": {
+    "password": "secret123",
+    "role": "agent",
+    "campaignId": "hayden-custom-test-10",
+    "dialSlot": "outbound3"
+  }
+}

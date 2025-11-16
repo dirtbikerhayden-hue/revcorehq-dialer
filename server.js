@@ -1,0 +1,2428 @@
+require('dotenv').config();
+
+const express = require('express');
+const bodyParser = require('body-parser');
+const twilioLib = require('twilio');
+const twilio = twilioLib;
+const { jwt: { AccessToken } } = twilioLib;
+const VoiceGrant = AccessToken.VoiceGrant;
+const axios = require('axios');
+const path = require('path');
+const session = require('express-session');
+const fs = require('fs');
+
+const app = express();
+
+// =========================
+//   CORE MIDDLEWARE
+// =========================
+
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
+
+app.use(
+  session({
+    secret: 'rehash-engine-secret-key', // TODO: change for production
+    resave: false,
+    saveUninitialized: true,
+    cookie: { maxAge: 1000 * 60 * 60 * 12 } // 12 hours
+  })
+);
+
+// Twilio webhooks: log inbound requests to help debug application errors
+app.use('/twilio', bodyParser.urlencoded({ extended: false }), (req, res, next) => {
+  try {
+    console.log('[Twilio] inbound', req.method, req.path, 'query:', req.query, 'body:', req.body);
+  } catch (err) {
+    console.error('[Twilio] log error:', err.message);
+  }
+  next();
+});
+
+// Fallback when primary inbound agent(s) did not answer
+app.all('/twilio/inbound/fallback', (req, res) => {
+  const VoiceResponse = twilio.twiml.VoiceResponse;
+  const twiml = new VoiceResponse();
+  const fromNumber = req.body.From || req.query.From || null;
+  const toNumber = req.body.To || req.query.To || null;
+  const attempted = (req.body.attempted || req.query.attempted || '')
+    .split(',')
+    .map(normalizeUsername)
+    .filter(Boolean);
+  const dialStatus = req.body.DialCallStatus || req.query.DialCallStatus || '';
+
+  console.log('[Inbound fallback] status:', dialStatus, 'attempted:', attempted);
+
+  // If the primary leg succeeded, stop.
+  if (dialStatus === 'completed') {
+    return res.type('text/xml').send(twiml.toString());
+  }
+
+  // Otherwise, dial the next two available agents not yet tried
+  const allTargets = selectInboundTargets(fromNumber, toNumber)
+    .filter(id => !attempted.includes(id))
+    .slice(0, 2);
+
+  if (!allTargets.length) {
+    twiml.say('No agents available. Please try again later.');
+    return res.type('text/xml').send(twiml.toString());
+  }
+
+  const normalizedTo = normalizePhone(toNumber);
+  const dial = twiml.dial({ timeout: 20, callerId: normalizedTo || defaultCallerId });
+  allTargets.forEach(id => dial.client(id));
+
+  res.type('text/xml').send(twiml.toString());
+});
+
+// ===============================
+//   USER MANAGEMENT (users.json)
+// ===============================
+
+const USERS_FILE = path.join(__dirname, 'users.json');
+const AGENT_SLOTS_FILE = path.join(__dirname, 'agent-slots.json');
+const LOCAL_PRESENCE_FILE = path.join(__dirname, 'local-presence.json');
+// High-priority inbound agents can be set later via config; default empty.
+const PRIORITY_INBOUND_AGENTS = [];
+
+function normalizeUsername(name) {
+  return (name || '').toString().trim().toLowerCase();
+}
+
+function normalizeUsersMap(map = {}) {
+  const normalized = {};
+  Object.entries(map || {}).forEach(([key, value]) => {
+    const normalizedKey = normalizeUsername(key);
+    if (!normalizedKey) return;
+    normalized[normalizedKey] = value || {};
+  });
+  return normalized;
+}
+
+function loadUsers() {
+  try {
+    if (!fs.existsSync(USERS_FILE)) {
+      const defaultUsers = {
+        outbound1: { password: 'Rehashengine11!', role: 'agent' }
+      };
+      fs.writeFileSync(USERS_FILE, JSON.stringify(defaultUsers, null, 2));
+      return defaultUsers;
+    }
+
+    const raw = fs.readFileSync(USERS_FILE, 'utf8');
+    return normalizeUsersMap(JSON.parse(raw) || {});
+  } catch (err) {
+    console.error('Error loading users.json:', err);
+    return {};
+  }
+}
+
+function saveUsers(users) {
+  try {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+  } catch (err) {
+    console.error('Error saving users.json:', err);
+  }
+}
+
+let users = loadUsers();
+
+function normalizePhone(num) {
+  if (!num) return '';
+  const digits = num.replace(/[^\d]/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('1') && digits.length === 11) return `+${digits}`;
+  if (digits.length === 10) return `+1${digits}`;
+  return `+${digits}`;
+}
+
+// ===============================
+//         CAMPAIGN STORE
+// ===============================
+
+const CAMPAIGNS_FILE = path.join(__dirname, 'campaigns.json');
+const CAMPAIGN_STATS_FILE = path.join(__dirname, 'campaign-stats.json');
+const LOCAL_LEADS_FILE = path.join(__dirname, 'local-leads.json');
+
+const DEFAULT_CAMPAIGNS = {
+  'old-bids':       { id: 'old-bids',       name: 'Old Bids – 30–180 Days', totalLeads: 200, ghlPipelineId: '', ghlStageId: '', ghlTag: '' },
+  'second-visit':   { id: 'second-visit',   name: 'Second-Visit Quotes',    totalLeads: 150, ghlPipelineId: '', ghlStageId: '', ghlTag: '' },
+  'lost-estimates': { id: 'lost-estimates', name: 'Lost Estimates – Rehash', totalLeads: 120, ghlPipelineId: '', ghlStageId: '', ghlTag: '' }
+};
+
+function loadCampaignMap() {
+  try {
+    if (!fs.existsSync(CAMPAIGNS_FILE)) {
+      fs.writeFileSync(CAMPAIGNS_FILE, JSON.stringify(DEFAULT_CAMPAIGNS, null, 2));
+      return { ...DEFAULT_CAMPAIGNS };
+    }
+    const raw = fs.readFileSync(CAMPAIGNS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Object.keys(parsed).length) {
+      return { ...DEFAULT_CAMPAIGNS };
+    }
+    Object.keys(parsed).forEach(key => {
+      parsed[key] = normalizeCampaignRecord(parsed[key], key);
+    });
+    return parsed;
+  } catch (err) {
+    console.error('Error loading campaigns.json:', err);
+    return { ...DEFAULT_CAMPAIGNS };
+  }
+}
+
+function saveCampaignMap(map) {
+  try {
+    fs.writeFileSync(CAMPAIGNS_FILE, JSON.stringify(map, null, 2));
+  } catch (err) {
+    console.error('Error saving campaigns.json:', err);
+  }
+}
+
+function normalizeCampaignRecord(record = {}, id = null) {
+  return {
+    id: record.id || id,
+    name: record.name || record.ghlTag || id || 'Campaign',
+    totalLeads: typeof record.totalLeads === 'number' ? record.totalLeads : Number(record.totalLeads || 0),
+    ghlPipelineId: record.ghlPipelineId || '',
+    ghlStageId: record.ghlStageId || '',
+    ghlTag: record.ghlTag || ''
+  };
+}
+
+function listCampaignArray() {
+  return Object.values(campaigns);
+}
+
+const DEFAULT_CAMPAIGN_STATS = {};
+const DEFAULT_LOCAL_LEADS = { queue: {}, completed: {} };
+
+function loadCampaignStats() {
+  try {
+    if (!fs.existsSync(CAMPAIGN_STATS_FILE)) {
+      fs.writeFileSync(CAMPAIGN_STATS_FILE, JSON.stringify(DEFAULT_CAMPAIGN_STATS, null, 2));
+      return {};
+    }
+    const raw = fs.readFileSync(CAMPAIGN_STATS_FILE, 'utf8');
+    return JSON.parse(raw) || {};
+  } catch (err) {
+    console.error('Error loading campaign-stats.json:', err);
+    return {};
+  }
+}
+
+function saveCampaignStats() {
+  try {
+    fs.writeFileSync(CAMPAIGN_STATS_FILE, JSON.stringify(campaignStats, null, 2));
+  } catch (err) {
+    console.error('Error saving campaign-stats.json:', err);
+  }
+}
+
+function ensureCampaignStats(campaignId) {
+  if (!campaignStats[campaignId]) {
+    campaignStats[campaignId] = {
+      totals: {},
+      byAgent: {},
+      lastUpdated: null
+    };
+  }
+  return campaignStats[campaignId];
+}
+
+function recordCampaignDisposition(campaignId, agentId, outcome) {
+  if (!campaignId) return;
+  const stats = ensureCampaignStats(campaignId);
+  stats.totals[outcome] = (stats.totals[outcome] || 0) + 1;
+  stats.totals.total = (stats.totals.total || 0) + 1;
+
+  if (!stats.byAgent[agentId]) stats.byAgent[agentId] = {};
+  const agentStats = stats.byAgent[agentId];
+  agentStats[outcome] = (agentStats[outcome] || 0) + 1;
+  agentStats.total = (agentStats.total || 0) + 1;
+
+  stats.lastUpdated = new Date().toISOString();
+  saveCampaignStats();
+}
+
+let campaigns = loadCampaignMap();
+let campaignStats = loadCampaignStats();
+let localLeadStore = loadLocalLeadStore();
+const recentDialMap = {};
+const contactLocks = {}; // in-memory lock so a contact isn't dialed twice concurrently
+const DISPOSITION_SKIP_TAGS = [
+  'bad_number',
+  'not_interested',
+  'wrong_contact',
+  'booked'
+];
+const lastAgentByNumber = {}; // track last agent who called a number
+const OUTCOME_LABELS = {
+  not_interested: 'Not Interested',
+  callback_requested: 'Callback Requested',
+  gatekeeper_transfer: 'Gatekeeper – Warm Transfer',
+  wrong_contact: 'Wrong Contact',
+  machine: 'Machine',
+  machine_voicemail: 'Machine / Voicemail',
+  bad_number: 'Bad Number',
+  booked: 'Booked Demo',
+  connected: 'Connected',
+  no_answer: 'No Answer',
+  busy: 'Busy',
+  failed: 'Failed'
+};
+
+// ===============================
+//         APP SETTINGS
+// ===============================
+
+const SETTINGS_FILE = path.join(__dirname, 'settings.json');
+const DEFAULT_SETTINGS = {
+  machineDetectionEnabled: false,
+  callRecordingEnabled: false
+};
+
+function loadSettings() {
+  try {
+    if (!fs.existsSync(SETTINGS_FILE)) {
+      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(DEFAULT_SETTINGS, null, 2));
+      return { ...DEFAULT_SETTINGS };
+    }
+    const raw = fs.readFileSync(SETTINGS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_SETTINGS, ...(parsed || {}) };
+  } catch (err) {
+    console.error('Error loading settings.json:', err);
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function saveSettings(settings) {
+  try {
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+  } catch (err) {
+    console.error('Error saving settings.json:', err);
+  }
+}
+
+let appSettings = loadSettings();
+
+// ===============================
+//       LOCAL LEAD DATA STORE
+// ===============================
+
+function loadLocalLeadStore() {
+  try {
+    if (!fs.existsSync(LOCAL_LEADS_FILE)) {
+      fs.writeFileSync(LOCAL_LEADS_FILE, JSON.stringify(DEFAULT_LOCAL_LEADS, null, 2));
+      return JSON.parse(JSON.stringify(DEFAULT_LOCAL_LEADS));
+    }
+    const raw = fs.readFileSync(LOCAL_LEADS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    return {
+      queue: parsed.queue || {},
+      completed: parsed.completed || {}
+    };
+  } catch (err) {
+    console.error('Error loading local-leads.json:', err);
+    return JSON.parse(JSON.stringify(DEFAULT_LOCAL_LEADS));
+  }
+}
+
+function saveLocalLeadStore() {
+  try {
+    fs.writeFileSync(LOCAL_LEADS_FILE, JSON.stringify(localLeadStore, null, 2));
+  } catch (err) {
+    console.error('Error saving local-leads.json:', err);
+  }
+}
+
+function normalizeLocalPhone(raw) {
+  if (!raw) return null;
+  const digits = String(raw).replace(/[^\d]/g, '');
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  if (String(raw).startsWith('+') && raw.length > 4) return raw;
+  return null;
+}
+
+function enqueueLocalLeads(campaignId, leads = [], mode = 'append') {
+  if (!campaignId) return { added: 0, total: 0 };
+  if (!Array.isArray(leads) || !leads.length) {
+    return { added: 0, total: getLocalQueueCount(campaignId) };
+  }
+  if (mode === 'replace') {
+    localLeadStore.queue[campaignId] = [];
+  }
+  if (!Array.isArray(localLeadStore.queue[campaignId])) {
+    localLeadStore.queue[campaignId] = [];
+  }
+  const now = Date.now();
+  let added = 0;
+  leads.forEach((lead, idx) => {
+    const phone = normalizeLocalPhone(lead.phone || lead.phoneNumber);
+    if (!phone) return;
+    const payload = {
+      localLeadId: `${campaignId}-${now}-${idx}-${Math.floor(Math.random() * 10000)}`,
+      name: (lead.name || `${lead.firstName || ''} ${lead.lastName || ''}` || '').trim() || `Lead ${idx + 1}`,
+      phone,
+      company: lead.company || lead.companyName || '',
+      email: lead.email || lead.emailAddress || '',
+      city: lead.city || '',
+      state: lead.state || lead.region || '',
+      meta: lead.meta || {}
+    };
+    localLeadStore.queue[campaignId].push(payload);
+    added += 1;
+  });
+  saveLocalLeadStore();
+  return { added, total: getLocalQueueCount(campaignId) };
+}
+
+function popLocalLead(campaignId) {
+  if (!campaignId) return null;
+  const queue = localLeadStore.queue[campaignId];
+  if (!queue || !queue.length) return null;
+  const lead = queue.shift();
+  saveLocalLeadStore();
+  return lead;
+}
+
+function recordLocalLeadOutcome(campaignId, meta, outcome, notes, leadDetails) {
+  if (!campaignId || !meta || !meta.localLeadId) return;
+  if (!Array.isArray(localLeadStore.completed[campaignId])) {
+    localLeadStore.completed[campaignId] = [];
+  }
+  localLeadStore.completed[campaignId].push({
+    id: meta.localLeadId,
+    outcome,
+    notes: notes || '',
+    leadName: leadDetails?.leadName || meta.localLeadName || '',
+    leadPhone: leadDetails?.leadPhone || meta.localLeadPhone || '',
+    timestamp: new Date().toISOString()
+  });
+  saveLocalLeadStore();
+}
+
+function getLocalQueueCount(campaignId) {
+  if (!campaignId) return 0;
+  const queue = localLeadStore.queue[campaignId];
+  return Array.isArray(queue) ? queue.length : 0;
+}
+
+function getLocalCompletedCount(campaignId) {
+  if (!campaignId) return 0;
+  const list = localLeadStore.completed[campaignId];
+  return Array.isArray(list) ? list.length : 0;
+}
+
+function getLocalLeadSummary() {
+  const queue = {};
+  const completed = {};
+  Object.keys(localLeadStore.queue).forEach(id => {
+    queue[id] = getLocalQueueCount(id);
+  });
+  Object.keys(localLeadStore.completed).forEach(id => {
+    completed[id] = getLocalCompletedCount(id);
+  });
+  return { queue, completed };
+}
+
+function isRecentlyDialed(campaignId, phone, contactId) {
+  if (!campaignId) return false;
+  const entry = recentDialMap[campaignId];
+  if (!entry) return false;
+  if (contactId && entry.contactId && contactId === entry.contactId) return true;
+  if (phone && entry.phone && phone === entry.phone) return true;
+  return false;
+}
+
+function markRecentlyDialed(campaignId, phone, contactId) {
+  if (!campaignId) return;
+  recentDialMap[campaignId] = {
+    phone: phone || null,
+    contactId: contactId || null,
+    ts: Date.now()
+  };
+}
+
+function isContactLocked(contactId) {
+  if (!contactId) return false;
+  const lock = contactLocks[contactId];
+  if (!lock) return false;
+  if (lock.expiresAt && lock.expiresAt < Date.now()) {
+    delete contactLocks[contactId];
+    return false;
+  }
+  return true;
+}
+
+function lockContact(contactId, campaignId, agentId, ttlMs = 20 * 60 * 1000) {
+  if (!contactId) return;
+  contactLocks[contactId] = {
+    campaignId,
+    agentId,
+    expiresAt: Date.now() + ttlMs
+  };
+}
+
+function unlockContact(contactId) {
+  if (!contactId) return;
+  delete contactLocks[contactId];
+}
+
+// ===============================
+//         ADMIN BACKEND
+// ===============================
+
+// For now we hard-code this so it “just works”.
+const ADMIN_PASSWORD = 'SuperSecretAdminPassword123';
+
+function isValidAdmin(req) {
+  const key = req.header('x-admin-key');
+  return key && key === ADMIN_PASSWORD;
+}
+
+// POST /api/admin/login
+app.post('/api/admin/login', express.json(), (req, res) => {
+  const { password } = req.body || {};
+
+  if (!password || password !== ADMIN_PASSWORD) {
+    return res.status(401).json({ ok: false, error: 'Invalid admin password' });
+  }
+
+  return res.json({ ok: true });
+});
+
+// GET /api/admin/users
+app.get('/api/admin/users', (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  res.json({ ok: true, users });
+});
+
+// POST /api/admin/users
+app.post('/api/admin/users', express.json(), (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+
+  const { username, password, role, campaignId, dialSlot } = req.body || {};
+  const normalizedUsername = normalizeUsername(username);
+  const normalizedCampaignId = campaignId ? String(campaignId) : null;
+  let normalizedDialSlot = dialSlot === '' || typeof dialSlot === 'undefined'
+    ? null
+    : String(dialSlot);
+
+  if (!normalizedUsername || !password) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'username and password are required' });
+  }
+
+  if (users[normalizedUsername]) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'User already exists' });
+  }
+
+  if (normalizedCampaignId && !campaigns[normalizedCampaignId]) {
+    return res.status(400).json({ ok: false, error: 'Invalid campaignId' });
+  }
+
+  if (!normalizedDialSlot) {
+    normalizedDialSlot = normalizedUsername;
+  }
+
+  if (normalizedDialSlot && !agentSlots[normalizedDialSlot]) {
+    agentSlots[normalizedDialSlot] = normalizeSlot({
+      id: normalizedDialSlot,
+      name: normalizedDialSlot,
+      dialTarget: agentSlots[normalizedDialSlot]?.dialTarget || '',
+      inboundNumber: agentSlots[normalizedDialSlot]?.inboundNumber || ''
+    });
+    saveAgentSlots(agentSlots);
+  }
+
+  const inferredDialSlot =
+    normalizedDialSlot || (agentSlots[normalizedUsername] ? normalizedUsername : null);
+
+  users[normalizedUsername] = {
+    password,
+    role: role || 'agent',
+    campaignId: normalizedCampaignId,
+    dialSlot: inferredDialSlot
+  };
+
+  saveUsers(users);
+
+  res.json({ ok: true, users });
+});
+
+// PUT /api/admin/users/:username
+app.put('/api/admin/users/:username', express.json(), (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+
+  const oldUsername = normalizeUsername(req.params.username);
+  const { newUsername, password, role, campaignId, dialSlot } = req.body || {};
+  const normalizedCampaignId = typeof campaignId === 'undefined' || campaignId === ''
+    ? undefined
+    : String(campaignId);
+  let normalizedDialSlot = typeof dialSlot === 'undefined'
+    ? undefined
+    : dialSlot === ''
+      ? null
+      : String(dialSlot);
+
+  if (!users[oldUsername]) {
+    return res.status(404).json({ ok: false, error: 'User not found' });
+  }
+
+  const nextUsername = newUsername ? normalizeUsername(newUsername) : oldUsername;
+
+  if (normalizedCampaignId && !campaigns[normalizedCampaignId]) {
+    return res.status(400).json({ ok: false, error: 'Invalid campaignId' });
+  }
+
+  if (normalizedDialSlot && !agentSlots[normalizedDialSlot]) {
+    return res.status(400).json({ ok: false, error: 'Invalid dial slot' });
+  }
+
+  if (typeof normalizedDialSlot === 'undefined' || normalizedDialSlot === null) {
+    normalizedDialSlot = oldUsername;
+  }
+
+  if (normalizedDialSlot && !agentSlots[normalizedDialSlot]) {
+    agentSlots[normalizedDialSlot] = normalizeSlot({
+      id: normalizedDialSlot,
+      name: normalizedDialSlot,
+      dialTarget: agentSlots[normalizedDialSlot]?.dialTarget || '',
+      inboundNumber: agentSlots[normalizedDialSlot]?.inboundNumber || ''
+    });
+    saveAgentSlots(agentSlots);
+  }
+
+  const updatedUser = {
+    password: password || users[oldUsername].password,
+    role: role || users[oldUsername].role || 'agent',
+    campaignId:
+      typeof normalizedCampaignId !== 'undefined'
+        ? normalizedCampaignId || null
+        : users[oldUsername].campaignId || null,
+    dialSlot:
+      typeof normalizedDialSlot !== 'undefined'
+        ? normalizedDialSlot
+        : users[oldUsername].dialSlot || null
+  };
+
+  if (!updatedUser.dialSlot && agentSlots[oldUsername]) {
+    updatedUser.dialSlot = oldUsername;
+  }
+
+  if (nextUsername && nextUsername !== oldUsername) {
+    if (users[nextUsername]) {
+      return res
+        .status(400)
+        .json({ ok: false, error: 'New username already exists' });
+    }
+    delete users[oldUsername];
+    users[nextUsername] = updatedUser;
+  } else {
+    users[oldUsername] = updatedUser;
+  }
+
+  saveUsers(users);
+
+  res.json({ ok: true, users });
+});
+
+// DELETE /api/admin/users/:username
+app.delete('/api/admin/users/:username', (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+
+  const username = normalizeUsername(req.params.username);
+
+  if (!users[username]) {
+    return res.status(404).json({ ok: false, error: 'User not found' });
+  }
+
+  delete users[username];
+  saveUsers(users);
+
+  res.json({ ok: true, users });
+});
+
+app.get('/api/admin/slots', (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  res.json({ ok: true, slots: agentSlots });
+});
+
+app.post('/api/admin/slots', express.json(), (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  const slot = normalizeSlot(req.body || {});
+  if (!slot.id || !slot.dialTarget) {
+    return res.status(400).json({ ok: false, error: 'slot id and dialTarget are required' });
+  }
+  if (agentSlots[slot.id]) {
+    return res.status(400).json({ ok: false, error: 'Slot already exists' });
+  }
+  agentSlots[slot.id] = slot;
+  saveAgentSlots(agentSlots);
+  res.json({ ok: true, slots: agentSlots });
+});
+
+app.put('/api/admin/slots/:id', express.json(), (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  const slotId = normalizeUsername(req.params.id);
+  if (!agentSlots[slotId]) {
+    return res.status(404).json({ ok: false, error: 'Slot not found' });
+  }
+  const incoming = normalizeSlot({ ...agentSlots[slotId], ...req.body, id: slotId });
+  if (!incoming.dialTarget) {
+    return res.status(400).json({ ok: false, error: 'dialTarget is required' });
+  }
+  agentSlots[slotId] = incoming;
+  saveAgentSlots(agentSlots);
+  res.json({ ok: true, slots: agentSlots });
+});
+
+app.delete('/api/admin/slots/:id', (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  const slotId = normalizeUsername(req.params.id);
+  if (!agentSlots[slotId]) {
+    return res.status(404).json({ ok: false, error: 'Slot not found' });
+  }
+  delete agentSlots[slotId];
+  saveAgentSlots(agentSlots);
+  res.json({ ok: true, slots: agentSlots });
+});
+
+app.get('/api/admin/local-presence', (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  res.json({ ok: true, map: localPresenceMap });
+});
+
+app.put('/api/admin/local-presence', express.json(), (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  const incoming = req.body?.map || {};
+  const cleaned = {};
+  Object.entries(incoming).forEach(([area, num]) => {
+    const normArea = (area || '').replace(/[^\d]/g, '').slice(0, 3);
+    const normNum = normalizePhone(num);
+    if (normArea && normNum) cleaned[normArea] = normNum;
+  });
+  localPresenceMap = cleaned;
+  saveLocalPresence(localPresenceMap);
+  res.json({ ok: true, map: localPresenceMap });
+});
+
+// Campaign admin endpoints
+async function buildCampaignResponse() {
+  const output = {};
+  for (const [id, value] of Object.entries(campaigns)) {
+    const normalized = normalizeCampaignRecord(value, id);
+    const localQueue = getLocalQueueCount(id);
+    const localDone = getLocalCompletedCount(id);
+    if (localQueue || localDone) {
+      normalized.computedTotalLeads = (normalized.computedTotalLeads || 0) + localQueue + localDone;
+      normalized.computedRemainingLeads = (normalized.computedRemainingLeads || 0) + localQueue;
+    }
+    if (isGhlCampaign(normalized)) {
+      const stats = await getCampaignLeadStats(normalized);
+      if (stats) {
+        normalized.computedTotalLeads = stats.total;
+        normalized.computedRemainingLeads = stats.remaining;
+      }
+    }
+    output[id] = normalized;
+  }
+  return output;
+}
+
+async function respondWithCampaigns(res) {
+  const map = await buildCampaignResponse();
+  res.json({ ok: true, campaigns: map });
+}
+
+app.get('/api/admin/campaigns', async (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  await respondWithCampaigns(res);
+});
+
+app.post('/api/admin/campaigns', express.json(), async (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  const { id, name, totalLeads, ghlPipelineId, ghlStageId, ghlTag } = req.body || {};
+  if (!id || !name) {
+    return res.status(400).json({ ok: false, error: 'id and name are required' });
+  }
+  if (campaigns[id]) {
+    return res.status(400).json({ ok: false, error: 'Campaign ID already exists' });
+  }
+  campaigns[id] = normalizeCampaignRecord(
+    {
+      id,
+      name,
+      totalLeads: Number(totalLeads) || 0,
+      ghlPipelineId: ghlPipelineId || '',
+      ghlStageId: ghlStageId || '',
+      ghlTag: ghlTag || ''
+    },
+    id
+  );
+  saveCampaignMap(campaigns);
+  await respondWithCampaigns(res);
+});
+
+app.put('/api/admin/campaigns/:id', express.json(), async (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  const campaignId = req.params.id;
+  if (!campaigns[campaignId]) {
+    return res.status(404).json({ ok: false, error: 'Campaign not found' });
+  }
+  const { name, totalLeads, ghlPipelineId, ghlStageId, ghlTag } = req.body || {};
+  if (name) campaigns[campaignId].name = name;
+  if (typeof totalLeads !== 'undefined') {
+    campaigns[campaignId].totalLeads = Math.max(0, Number(totalLeads) || 0);
+  }
+  if (typeof ghlPipelineId !== 'undefined') {
+    campaigns[campaignId].ghlPipelineId = ghlPipelineId || '';
+  }
+  if (typeof ghlStageId !== 'undefined') {
+    campaigns[campaignId].ghlStageId = ghlStageId || '';
+  }
+  if (typeof ghlTag !== 'undefined') {
+    campaigns[campaignId].ghlTag = ghlTag || '';
+  }
+  saveCampaignMap(campaigns);
+  await respondWithCampaigns(res);
+});
+
+app.delete('/api/admin/campaigns/:id', async (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  const campaignId = req.params.id;
+  if (!campaigns[campaignId]) {
+    return res.status(404).json({ ok: false, error: 'Campaign not found' });
+  }
+  delete campaigns[campaignId];
+  saveCampaignMap(campaigns);
+  if (campaignStats[campaignId]) {
+    delete campaignStats[campaignId];
+    saveCampaignStats();
+  }
+  await respondWithCampaigns(res);
+});
+
+app.get('/api/admin/campaign-metrics', (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  const { campaignId, agents, dispositions } = req.query || {};
+  if (!campaignId) {
+    return res.status(400).json({ ok: false, error: 'campaignId is required' });
+  }
+  const stats = ensureCampaignStats(campaignId);
+  const campaign = campaigns[campaignId] || { id: campaignId, name: campaignId, totalLeads: 0 };
+  const agentFilter = agents ? agents.split(',').map(a => a.trim()).filter(Boolean) : null;
+  const dispoFilter = dispositions ? dispositions.split(',').map(d => d.trim()).filter(Boolean) : null;
+
+  const totals = { ...(stats.totals || {}) };
+  const filteredTotals = {};
+  const dispositionsList = Object.keys(totals).filter(key => key !== 'total');
+  const totalDispos = dispositionsList.reduce((sum, key) => sum + (totals[key] || 0), 0);
+  const remainingLeads = Math.max(0, (campaign.totalLeads || 0) - totalDispos);
+
+  (dispoFilter || dispositionsList).forEach(key => {
+    if (typeof totals[key] !== 'undefined') {
+      filteredTotals[key] = totals[key];
+    }
+  });
+
+  const agentBreakdown = Object.entries(stats.byAgent || {})
+    .filter(([agentId]) => !agentFilter || agentFilter.includes(agentId))
+    .map(([agentId, counts]) => {
+      const filtered = {};
+      (dispoFilter || Object.keys(counts)).forEach(key => {
+        if (key === 'total') return;
+        if (typeof counts[key] !== 'undefined') {
+          filtered[key] = counts[key];
+        }
+      });
+      return {
+        agentId,
+        total: counts.total || 0,
+        counts: filtered
+      };
+    });
+
+  res.json({
+    ok: true,
+    campaign,
+    totals,
+    filteredTotals,
+    remainingLeads,
+    agentBreakdown,
+    dispositions: dispositionsList
+  });
+});
+// GET /api/admin/settings
+app.get('/api/admin/settings', (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  res.json({ ok: true, settings: appSettings });
+});
+
+// Local lead upload (CSV/JSON) for fallback mode while GHL is down
+app.post('/api/admin/local-leads', express.json({ limit: '5mb' }), (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+
+  const { campaignId, leads, mode } = req.body || {};
+  if (!campaignId) {
+    return res.status(400).json({ ok: false, error: 'campaignId is required' });
+  }
+  if (!Array.isArray(leads) || !leads.length) {
+    return res.status(400).json({ ok: false, error: 'No leads provided' });
+  }
+
+  const { added, total } = enqueueLocalLeads(campaignId, leads, mode === 'replace' ? 'replace' : 'append');
+  const summary = getLocalLeadSummary();
+
+  res.json({ ok: true, added, total, summary });
+});
+
+// Hang up active call for the current agent
+app.post('/api/agent/hangup', async (req, res) => {
+  const agentId = requireAgent(req, res);
+  if (!agentId) return;
+  const callSid = activeCallByAgent[agentId];
+  if (!callSid) {
+    return res.json({ ok: false, error: 'No active call for agent.' });
+  }
+  try {
+    await client.calls(callSid).update({ status: 'completed' });
+    delete activeCallByAgent[agentId];
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('Error hanging up call:', err.message);
+    return res.status(500).json({ ok: false, error: 'Failed to hang up call.' });
+  }
+});
+
+// Manual dial endpoint
+app.post('/api/manual-dial', express.json(), async (req, res) => {
+  const agentId = requireAgent(req, res);
+  if (!agentId) return;
+
+  const { toNumber, callerId, campaignId, reason } = req.body || {};
+  if (!toNumber) {
+    return res.status(400).json({ ok: false, error: 'Destination number required' });
+  }
+  if (activeCallByAgent[agentId]) {
+    return res.status(400).json({ ok: false, error: 'Hang up the current call before manual dial.' });
+  }
+
+  const fromNumber =
+    callerId ||
+    getDialNumberForAgent(agentId) ||
+    chooseLocalNumberForLead(toNumber) ||
+    defaultCallerId;
+  console.log('[Manual outbound]', { agentId, fromNumber, slotId: getUserDialConfig(agentId)?.slotId, toNumber });
+  if (!fromNumber) {
+    return res.status(400).json({ ok: false, error: 'No caller ID available' });
+  }
+
+  try {
+    const call = await client.calls.create({
+      to: toNumber,
+      from: fromNumber,
+      url: `${BASE_URL}/twilio/voice?agentId=${agentId}`,
+      statusCallback: `${BASE_URL}/twilio/status`,
+      statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+      machineDetection: appSettings.machineDetectionEnabled ? 'Enable' : undefined
+    });
+
+    callMap[call.sid] = {
+      agentId,
+      lead: {
+        id: null,
+        name: toNumber,
+        phone: toNumber,
+        campaignId: campaignId || null,
+        campaignTag: campaignId && campaigns[campaignId]?.ghlTag ? campaigns[campaignId].ghlTag : null
+      },
+      campaignId: campaignId || null,
+      manual: { toNumber, callerId: fromNumber, reason, contactCreated: false }
+    };
+    activeCallByAgent[agentId] = call.sid;
+    lastAgentByNumber[toNumber] = agentId;
+    return res.json({ ok: true, callSid: call.sid });
+  } catch (err) {
+    console.error('Manual dial failed:', err.message);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Inbound routing webhook (set this as your Twilio number voice webhook)
+app.all('/twilio/inbound', (req, res) => {
+  const VoiceResponse = twilio.twiml.VoiceResponse;
+  const twiml = new VoiceResponse();
+  const fromNumber = req.body.From || req.query.From || null;
+  const toNumber = req.body.To || req.query.To || null;
+  console.log('[Twilio inbound] From:', fromNumber);
+  if (!fromNumber) {
+    twiml.say('No from number provided.');
+    return res.type('text/xml').send(twiml.toString());
+  }
+
+  const success = buildSequentialInbound(twiml, fromNumber, toNumber);
+  if (!success) {
+    twiml.say('No agents available. Please try again later.');
+  }
+
+  res.type('text/xml').send(twiml.toString());
+});
+
+
+// POST /api/admin/settings
+app.post('/api/admin/settings', express.json(), (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  const { machineDetectionEnabled, callRecordingEnabled } = req.body || {};
+  appSettings = {
+    ...appSettings,
+    machineDetectionEnabled: Boolean(machineDetectionEnabled),
+    callRecordingEnabled: Boolean(callRecordingEnabled)
+  };
+  saveSettings(appSettings);
+  res.json({ ok: true, settings: appSettings });
+});
+
+app.get('/api/admin/ghl/pipelines', async (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  if (!ghlClient || !GHL_LOCATION_ID) {
+    return res.status(400).json({ ok: false, error: 'GHL API not configured' });
+  }
+  try {
+    const response = await ghlClient.get('/opportunities/pipelines', {
+      params: { locationId: GHL_LOCATION_ID }
+    });
+    res.json({ ok: true, pipelines: response.data?.pipelines || [] });
+  } catch (err) {
+    console.error('Error fetching GHL pipelines:', err.response?.data || err.message);
+    const status = err.response?.status || 500;
+    const friendly = formatGhlError(err, 'Failed to load pipelines from GHL');
+    res.status(status === 401 || status === 403 ? 400 : 500).json({ ok: false, error: friendly });
+  }
+});
+
+app.get('/api/admin/ghl/tags', async (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  if (!ghlClient || !GHL_LOCATION_ID) {
+    return res.status(400).json({ ok: false, error: 'GHL API not configured' });
+  }
+  try {
+    const response = await ghlClient.get(`/locations/${GHL_LOCATION_ID}/tags`, {
+      params: { locationId: GHL_LOCATION_ID }
+    });
+    res.json({ ok: true, tags: response.data?.tags || response.data?.data || [] });
+  } catch (err) {
+    console.error('Error fetching GHL tags:', err.response?.data || err.message);
+    const status = err.response?.status || 500;
+    const friendly = formatGhlError(err, 'Failed to load tags from GHL');
+    res.status(status === 401 || status === 403 ? 400 : 500).json({ ok: false, error: friendly });
+  }
+});
+
+// ===============================
+//             LOGIN
+// ===============================
+
+app.post('/login', express.json(), (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Missing username or password' });
+  }
+
+  const normalizedUsername = normalizeUsername(username);
+  const user = users[normalizedUsername];
+
+  if (!user || user.password !== password) {
+    return res.status(401).json({ error: 'Invalid username or password' });
+  }
+
+  req.session.agentId = normalizedUsername;
+  req.session.agentName = normalizedUsername;
+  const assignedCampaignId = user.campaignId || null;
+  req.session.assignedCampaignId = assignedCampaignId;
+
+  console.log('Agent logged in:', normalizedUsername);
+
+  return res.json({
+    success: true,
+    agentId: normalizedUsername,
+    agentName: normalizedUsername,
+    campaignId: assignedCampaignId,
+    campaignName: assignedCampaignId ? (campaigns[assignedCampaignId]?.name || assignedCampaignId) : null
+  });
+});
+
+// GET /me
+app.get('/me', (req, res) => {
+  if (!req.session.agentId) {
+    return res.json({ loggedIn: false });
+  }
+
+  return res.json({
+    loggedIn: true,
+    agentId: req.session.agentId,
+    agentName: req.session.agentName,
+    campaignId: req.session.assignedCampaignId || null,
+    campaignName: req.session.assignedCampaignId
+      ? (campaigns[req.session.assignedCampaignId]?.name || req.session.assignedCampaignId)
+      : null
+  });
+});
+
+// ---------- END AUTH / ADMIN ----------
+
+// serve static files
+app.use('/public', express.static(path.join(__dirname, 'public')));
+
+// =========================
+//   ENV / TWILIO CONFIG
+// =========================
+
+const {
+  TWILIO_ACCOUNT_SID,
+  TWILIO_AUTH_TOKEN,
+  BASE_URL,
+  ZAPIER_HOOK_URL,
+  SLACK_WEBHOOK_URL,
+  PORT,
+  GHL_API_KEY,
+  GHL_LOCATION_ID,
+  GHL_BASE_URL,
+  GHL_LOCK_TAG
+} = process.env;
+
+const GHL_API_VERSION = '2021-07-28';
+const GHL_BASE_ENDPOINT = GHL_BASE_URL || 'https://services.leadconnectorhq.com';
+const DIALER_LOCK_TAG = GHL_LOCK_TAG || 'RehashDialer:Locked';
+
+console.log('Loaded Twilio SID:', TWILIO_ACCOUNT_SID);
+console.log(
+  'Auth token length:',
+  TWILIO_AUTH_TOKEN ? TWILIO_AUTH_TOKEN.length : 'missing'
+);
+
+const client = twilio(TWILIO_ACCOUNT_SID || '', TWILIO_AUTH_TOKEN || '');
+
+// =========================
+//   AGENT SLOTS (dial targets)
+// =========================
+
+const DEFAULT_AGENT_SLOTS = {
+  outbound1: {
+    id: 'outbound1',
+    name: 'Slot 1',
+    dialTarget: process.env.AGENT1_PHONE || '+10000000001'
+  },
+  outbound2: {
+    id: 'outbound2',
+    name: 'Slot 2',
+    dialTarget: process.env.AGENT2_PHONE || '+10000000002'
+  },
+  outbound3: {
+    id: 'outbound3',
+    name: 'Slot 3',
+    dialTarget: process.env.AGENT3_PHONE || '+10000000003'
+  },
+  outbound4: {
+    id: 'outbound4',
+    name: 'Slot 4',
+    dialTarget: process.env.AGENT4_PHONE || '+10000000004'
+  },
+  outbound5: {
+    id: 'outbound5',
+    name: 'Slot 5',
+    dialTarget: process.env.AGENT5_PHONE || '+10000000005'
+  },
+  outbound6: {
+    id: 'outbound6',
+    name: 'Slot 6',
+    dialTarget: process.env.AGENT6_PHONE || '+10000000006'
+  },
+  outbound7: {
+    id: 'outbound7',
+    name: 'Slot 7',
+    dialTarget: process.env.AGENT7_PHONE || '+10000000007'
+  },
+  outbound8: {
+    id: 'outbound8',
+    name: 'Slot 8',
+    dialTarget: process.env.AGENT8_PHONE || '+10000000008'
+  },
+  outbound9: {
+    id: 'outbound9',
+    name: 'Slot 9',
+    dialTarget: process.env.AGENT9_PHONE || '+10000000009'
+  },
+  outbound10: {
+    id: 'outbound10',
+    name: 'Slot 10',
+    dialTarget: process.env.AGENT10_PHONE || '+10000000010'
+  }
+};
+
+function loadAgentSlotsFromFile() {
+  try {
+    if (!fs.existsSync(AGENT_SLOTS_FILE)) {
+      fs.writeFileSync(AGENT_SLOTS_FILE, JSON.stringify(DEFAULT_AGENT_SLOTS, null, 2));
+      return { ...DEFAULT_AGENT_SLOTS };
+    }
+    const raw = fs.readFileSync(AGENT_SLOTS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    const normalized = {};
+    Object.values(parsed || {}).forEach(slot => {
+      const norm = normalizeSlot(slot);
+      if (norm.id) normalized[norm.id] = norm;
+    });
+    return Object.keys(normalized).length ? normalized : { ...DEFAULT_AGENT_SLOTS };
+  } catch (err) {
+    console.error('Error loading agent slots:', err);
+    return { ...DEFAULT_AGENT_SLOTS };
+  }
+}
+
+function saveAgentSlots(map) {
+  try {
+    fs.writeFileSync(AGENT_SLOTS_FILE, JSON.stringify(map, null, 2));
+  } catch (err) {
+    console.error('Error saving agent slots:', err);
+  }
+}
+
+function normalizeSlot(slot = {}) {
+  const id = normalizeUsername(slot.id);
+  if (!id) return { id: null, name: '', dialTarget: '', inboundNumber: '' };
+  return {
+    id,
+    name: slot.name || id,
+    dialTarget: normalizePhone(slot.dialTarget),
+    inboundNumber: normalizePhone(slot.inboundNumber)
+  };
+}
+
+let agentSlots = loadAgentSlotsFromFile();
+
+// test queues – replace with real lead source later
+const leadsQueue = {
+  'old-bids': [
+    { id: 1, name: 'Old Bid Lead', phone: '+14804476460' }
+  ],
+  'second-visit': [
+    { id: 2, name: 'Second Visit', phone: '+14805551234' }
+  ],
+  'lost-estimates': [
+    { id: 3, name: 'Lost Estimate', phone: '+14805555678' }
+  ],
+  default: [
+    { id: 4, name: 'Test Lead', phone: '+14804476460' }
+  ]
+};
+
+function getNextLocalLead(campaignId) {
+  const queue = leadsQueue[campaignId] || leadsQueue.default;
+  if (!queue || !queue.length) return null;
+  return queue.shift();
+}
+
+function getAgentSlot(slotId) {
+  if (!slotId) return null;
+  return agentSlots[slotId] || null;
+}
+
+function getUserDialConfig(agentId) {
+  const normalizedId = normalizeUsername(agentId);
+  if (!normalizedId) return null;
+  const user = users[normalizedId];
+  let slotId = null;
+  if (user && user.dialSlot && getAgentSlot(String(user.dialSlot))) {
+    slotId = String(user.dialSlot);
+  } else if (getAgentSlot(normalizedId)) {
+    slotId = normalizedId;
+  } else {
+    slotId = user && user.dialSlot ? String(user.dialSlot) : String(normalizedId);
+  }
+  const slot = getAgentSlot(slotId);
+  return {
+    slotId,
+    dialTarget: user && user.dialTarget ? user.dialTarget : slot ? slot.dialTarget : null,
+    name: slot ? slot.name : (user?.displayName || normalizedId)
+  };
+}
+
+function getAvailableAgents(agentIds = []) {
+  return (agentIds || [])
+    .map(normalizeUsername)
+    .filter(Boolean)
+    .filter(id => !activeCallByAgent[id] && (users[id] || agentSlots[id]));
+}
+
+function getDialNumberForAgent(agentId) {
+  const cfg = getUserDialConfig(agentId);
+  return cfg && cfg.dialTarget ? cfg.dialTarget : null;
+}
+
+function selectInboundTargets(fromNumber, toNumber) {
+  const preferredAgent = normalizeUsername(lastAgentByNumber[fromNumber]);
+  const allAgents = Object.keys(users || {}).map(normalizeUsername).filter(Boolean);
+  let targets = [];
+
+  const normalizedTo = normalizePhone(toNumber);
+  if (normalizedTo) {
+    const matchedSlots = Object.values(agentSlots || {})
+      .filter(slot => slot.inboundNumber === normalizedTo)
+      .map(slot => slot.id);
+    const matchAvailable = getAvailableAgents(matchedSlots);
+    if (matchAvailable.length) {
+      targets = matchAvailable;
+    }
+  }
+
+  const priorityTargets = getAvailableAgents(PRIORITY_INBOUND_AGENTS);
+  if (priorityTargets.length) {
+    targets = priorityTargets;
+  }
+
+  if (!targets.length && preferredAgent) {
+    const preferredAvailable = getAvailableAgents([preferredAgent]);
+    if (preferredAvailable.length) {
+      targets = preferredAvailable;
+    }
+  }
+
+  if (!targets.length) {
+    const available = getAvailableAgents(allAgents).filter(id => !targets.includes(id));
+    targets = available.slice(0, 2);
+  }
+
+  return targets;
+}
+
+function buildInboundDial(twiml, targets, toNumber) {
+  const normalizedTo = normalizePhone(toNumber);
+  const effectiveCallerId = normalizedTo || defaultCallerId;
+  const dial = twiml.dial({ timeout: 20, callerId: effectiveCallerId });
+  targets.forEach(agentId => {
+    dial.client(agentId);
+  });
+}
+
+function buildSequentialInbound(twiml, fromNumber, toNumber) {
+  const targets = selectInboundTargets(fromNumber, toNumber);
+  if (!targets.length) return false;
+  const primary = targets[0];
+  const fallback = targets.slice(1, 3); // up to 2 more
+
+  const attempted = encodeURIComponent(primary);
+  const actionUrl = `${BASE_URL}/twilio/inbound/fallback?from=${encodeURIComponent(fromNumber || '')}&to=${encodeURIComponent(toNumber || '')}&attempted=${attempted}`;
+  const dial = twiml.dial({ timeout: 10, callerId: normalizePhone(toNumber) || defaultCallerId, action: actionUrl });
+  dial.client(primary);
+  return true;
+}
+
+const metricsByAgent = {};
+const callMap = {};
+const activeLeadMetaByAgent = {};
+const activeCallByAgent = {};
+
+const ghlClient = GHL_API_KEY
+  ? axios.create({
+      baseURL: GHL_BASE_ENDPOINT,
+      headers: {
+        Authorization: `Bearer ${GHL_API_KEY}`,
+        Version: GHL_API_VERSION,
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      }
+    })
+  : null;
+
+function formatGhlError(err, fallback) {
+  const prefix = fallback || 'GHL request failed';
+  if (!err) return prefix;
+  const data = err.response?.data;
+  const parts = [];
+  if (typeof data === 'string') {
+    parts.push(data);
+  } else if (data && typeof data === 'object') {
+    if (data.message) parts.push(data.message);
+    if (data.error && typeof data.error === 'object') {
+      if (data.error.message) parts.push(data.error.message);
+      if (data.error.error) parts.push(data.error.error);
+    }
+    if (!parts.length) {
+      parts.push(JSON.stringify(data));
+    }
+  } else if (err.message) {
+    parts.push(err.message);
+  }
+  return `${prefix}${parts.length ? `: ${parts.join(' • ')}` : ''}`;
+}
+
+function isGhlCampaign(campaign) {
+  return Boolean(
+    ghlClient &&
+    GHL_LOCATION_ID &&
+    campaign &&
+    campaign.ghlPipelineId &&
+    campaign.ghlTag
+  );
+}
+
+function extractContactPhone(contact) {
+  if (!contact) return null;
+  if (typeof contact.phone === 'string' && contact.phone.trim()) {
+    return contact.phone.trim();
+  }
+  const phones = contact.contactPhones || contact.phoneNumbers || [];
+  const firstPhone = phones.find(p => p && (p.phone || p.number));
+  if (firstPhone && (firstPhone.phone || firstPhone.number)) {
+    return (firstPhone.phone || firstPhone.number).trim();
+  }
+  if (Array.isArray(contact.phone)) {
+    const raw = contact.phone.find(Boolean);
+    if (raw) return raw.trim();
+  }
+  return null;
+}
+
+function buildContactName(contact = {}) {
+  const { firstName, lastName, name, fullName, companyName } = contact;
+  const composite = `${firstName || ''} ${lastName || ''}`.trim();
+  return composite || name || fullName || companyName || 'Lead';
+}
+
+function normalizeTagList(tags) {
+  if (!tags) return [];
+  if (Array.isArray(tags)) {
+    return tags.map(tag => {
+      if (!tag) return null;
+      if (typeof tag === 'string') return tag;
+      return tag.name || tag.tag || null;
+    }).filter(Boolean);
+  }
+  return [];
+}
+
+async function ghlAddTags(contactId, tags = []) {
+  if (!ghlClient || !contactId || !tags.length) return;
+  try {
+    await ghlClient.post(
+      `/contacts/${contactId}/tags/`,
+      { tags }
+    );
+  } catch (err) {
+    console.error('Error adding GHL tags:', err.response?.data || err.message);
+  }
+}
+
+async function ghlRemoveTags(contactId, tags = []) {
+  if (!ghlClient || !contactId || !tags.length) return;
+  try {
+    await ghlClient.post(
+      `/contacts/${contactId}/tags/remove`,
+      { tags }
+    );
+  } catch (err) {
+    console.error('Error removing GHL tags:', err.response?.data || err.message);
+  }
+}
+
+async function ghlAddNote(contactId, text) {
+  if (!ghlClient || !contactId || !text) return;
+  try {
+    await ghlClient.post(
+      `/contacts/${contactId}/notes/`,
+      { body: text },
+      { params: { locationId: GHL_LOCATION_ID } }
+    );
+  } catch (err) {
+    console.error('Error adding GHL note:', err.response?.data || err.message);
+  }
+}
+
+async function ghlUpdateOpportunity(opportunityId, payload = {}) {
+  // Temporarily disabled due to 422 from IAM service; re-enable when allowed
+  return;
+}
+
+async function ghlFetchContact(contactId) {
+  if (!ghlClient || !contactId) return null;
+  try {
+    const res = await ghlClient.get(`/contacts/${contactId}`, {
+      params: { locationId: GHL_LOCATION_ID }
+    });
+    return res.data?.contact || res.data?.data || res.data;
+  } catch (err) {
+    console.error('Error fetching GHL contact:', err.response?.data || err.message);
+    return null;
+  }
+}
+
+async function ghlSearchContactByPhone(phone) {
+  if (!ghlClient || !phone) return null;
+  try {
+    const res = await ghlClient.get('/contacts/search', {
+      params: {
+        locationId: GHL_LOCATION_ID,
+        query: phone
+      }
+    });
+    const contacts = res.data?.contacts || res.data?.data || [];
+    if (!contacts.length) return null;
+    // Best-effort: pick exact phone match if present
+    const normalized = normalizeLocalPhone(phone);
+    const exact = contacts.find(c => normalizeLocalPhone(extractContactPhone(c)) === normalized);
+    return exact || contacts[0];
+  } catch (err) {
+    console.error('Error searching GHL contact by phone:', err.response?.data || err.message);
+    return null;
+  }
+}
+
+async function ghlCreateContact(payload = {}) {
+  if (!ghlClient) return null;
+  try {
+    const res = await ghlClient.post('/contacts/', payload, {
+      params: { locationId: GHL_LOCATION_ID }
+    });
+    return res.data?.contact || res.data?.data || res.data || null;
+  } catch (err) {
+    console.error('Error creating GHL contact:', err.response?.data || err.message);
+    return null;
+  }
+}
+
+async function fetchGhlLeadForCampaign(campaign) {
+  if (!isGhlCampaign(campaign)) return null;
+  try {
+    const campaignId = campaign.id || campaign.campaignId || null;
+    const params = {
+      location_id: GHL_LOCATION_ID,
+      pipeline_id: campaign.ghlPipelineId,
+      pipeline_stage_id: campaign.ghlStageId || undefined,
+      limit: 50,
+      page: 1
+    };
+    const res = await ghlClient.get('/opportunities/search', { params });
+    const collection = res.data?.opportunities || res.data?.data || [];
+    for (const opp of collection) {
+      const contactId = opp.contactId || opp.contact_id || null;
+      const contact =
+        opp.contact ||
+        (contactId ? await ghlFetchContact(contactId) : null);
+      if (!contact) continue;
+      if (isContactLocked(contactId)) continue;
+      const tags = normalizeTagList(contact.tags);
+      if (!tags.includes(campaign.ghlTag)) continue;
+      // Skip if contact already has a final disposition we don't want to redial
+      const hasFinalDispo = tags.some(t => {
+        if (!t) return false;
+        const lower = t.toLowerCase();
+        return DISPOSITION_SKIP_TAGS.includes(lower);
+      });
+      if (hasFinalDispo) continue;
+      const phone = extractContactPhone(contact);
+      if (!phone) continue;
+      if (isRecentlyDialed(campaignId, phone, contactId || contact.id)) continue;
+
+      if (campaign.ghlStageId) {
+        await ghlUpdateOpportunity(opp.id, {
+          stageId: campaign.ghlStageId,
+          status: opp.status || 'open'
+        });
+      }
+
+      lockContact(contact.id, campaignId, null);
+      return {
+        id: contact.id,
+        name: buildContactName(contact),
+        phone,
+        email: contact.email || null,
+        ghlOpportunityId: opp.id,
+        ghlContactId: contact.id || contactId || null,
+        ghlPipelineId: opp.pipelineId || opp.pipeline_id,
+        ghlStageId: opp.stageId || opp.stage_id,
+        campaignTag: campaign.ghlTag
+      };
+    }
+  } catch (err) {
+    console.error('GHL fetch error:', err.response?.data || err.message);
+  }
+  return null;
+}
+
+async function handleGhlDisposition(agentId, campaignId, meta, outcome, notes, leadDetails) {
+  if (!meta) return;
+  const campaign = campaigns[campaignId] || {};
+  const safeOutcome = outcome || 'unknown';
+  const friendlyOutcome = OUTCOME_LABELS[safeOutcome] || safeOutcome;
+  const outcomeTag = (!safeOutcome || safeOutcome === 'connected') ? null : safeOutcome; // only tag meaningful dispositions
+  let contactId = meta.ghlContactId || null;
+
+  if (!contactId && leadDetails?.leadPhone) {
+    const contact = await ghlSearchContactByPhone(leadDetails.leadPhone);
+    if (contact && contact.id) {
+      contactId = contact.id;
+    }
+  }
+
+  if (!contactId) {
+    console.warn('handleGhlDisposition: no contactId available to tag/note.');
+    return;
+  }
+  console.log('handleGhlDisposition: using contactId', contactId, 'outcome', safeOutcome);
+
+  const lines = [
+    `Disposition: ${friendlyOutcome}`,
+    agentId ? `Agent: ${agentId}` : null,
+    notes ? `Notes: ${notes}` : null
+  ].filter(Boolean);
+
+  if (outcomeTag) {
+    try {
+      await ghlAddTags(contactId, [outcomeTag]);
+    } catch (err) {
+      console.error('handleGhlDisposition: add outcome tag failed', err.response?.data || err.message);
+    }
+  }
+
+  if (lines.length && safeOutcome !== 'connected') {
+    try {
+      await ghlAddNote(contactId, lines.join('\n'));
+    } catch (err) {
+      console.error('handleGhlDisposition: add note failed', err.response?.data || err.message);
+    }
+  }
+  if (meta.ghlOpportunityId) {
+    const stagePayload = {};
+    if (campaign.ghlStageId) {
+      stagePayload.pipeline_stage_id = campaign.ghlStageId;
+    }
+    if (Object.keys(stagePayload).length) {
+      await ghlUpdateOpportunity(meta.ghlOpportunityId, stagePayload);
+    }
+  }
+}
+
+async function getCampaignLeadStats(campaign) {
+  if (!isGhlCampaign(campaign)) return null;
+  if (!ghlClient) return null;
+  try {
+    let page = 1;
+    const limit = 100;
+    let total = 0;
+    let remaining = 0;
+    const outcomePrefix = `${campaign.ghlTag}:`;
+    while (true) {
+      const params = {
+        location_id: GHL_LOCATION_ID,
+        pipeline_id: campaign.ghlPipelineId,
+        pipeline_stage_id: campaign.ghlStageId || undefined,
+        page,
+        limit
+      };
+      const res = await ghlClient.get('/opportunities/search', { params });
+      const opportunities = res.data?.opportunities || res.data?.data || [];
+      if (!opportunities.length) break;
+      for (const opp of opportunities) {
+        const contact = opp.contact || (opp.contactId ? await ghlFetchContact(opp.contactId) : null);
+        if (!contact) continue;
+        const tags = normalizeTagList(contact.tags);
+        if (!tags.includes(campaign.ghlTag)) continue;
+        total += 1;
+        const hasOutcome = tags.some(tag => tag && tag.startsWith(outcomePrefix));
+        if (!hasOutcome) {
+          remaining += 1;
+        }
+      }
+      if (opportunities.length < limit) break;
+      page += 1;
+      if (page > 15) break;
+    }
+    return { total, remaining };
+  } catch (err) {
+    console.error('Error counting GHL leads:', err.response?.data || err.message);
+    return null;
+  }
+}
+
+// =========================
+//   SESSION HELPER
+// =========================
+
+function requireAgent(req, res) {
+  const agentId = req.session.agentId;
+  if (!agentId) {
+    res.status(401).json({ error: 'Not logged in as agent' });
+    return null;
+  }
+  return String(agentId);
+}
+
+// =========================
+//   VOICE TOKEN FOR BROWSER
+// =========================
+
+app.get('/api/voice-token', (req, res) => {
+  const agentId = requireAgent(req, res);
+  if (!agentId) return; // requireAgent already sent 401
+
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const apiKey = process.env.TWILIO_API_KEY;
+  const apiSecret = process.env.TWILIO_API_SECRET;
+
+  if (!accountSid || !apiKey || !apiSecret) {
+    console.error('Missing TWILIO_ACCOUNT_SID or TWILIO_API_KEY / SECRET');
+    return res
+      .status(500)
+      .json({ error: 'Twilio API key/secret not configured' });
+  }
+
+  // Identity should match the <Client> identity in /twilio/voice
+  const identity = String(agentId); // e.g. "outbound1"
+
+  const token = new AccessToken(accountSid, apiKey, apiSecret, {
+    identity
+  });
+
+  const voiceGrant = new VoiceGrant({
+    incomingAllow: true
+    // We don't need outgoingApplicationSid yet – browser isn't dialing out directly
+  });
+
+  token.addGrant(voiceGrant);
+
+  const jwt = token.toJwt();
+  res.json({ token: jwt, identity });
+});
+
+// =========================
+//   LOCAL PRESENCE / HELPERS
+// =========================
+
+function loadLocalPresence() {
+  try {
+    if (!fs.existsSync(LOCAL_PRESENCE_FILE)) {
+      fs.writeFileSync(LOCAL_PRESENCE_FILE, JSON.stringify({}, null, 2));
+      return {};
+    }
+    const raw = fs.readFileSync(LOCAL_PRESENCE_FILE, 'utf8');
+    return JSON.parse(raw) || {};
+  } catch (err) {
+    console.error('Error loading local presence map:', err);
+    return {};
+  }
+}
+
+function saveLocalPresence(map) {
+  try {
+    fs.writeFileSync(LOCAL_PRESENCE_FILE, JSON.stringify(map, null, 2));
+  } catch (err) {
+    console.error('Error saving local presence map:', err);
+  }
+}
+
+let localPresenceMap = loadLocalPresence();
+const defaultCallerId = '+14158304289';
+
+function getAreaCode(phone) {
+  if (!phone || !phone.startsWith('+1') || phone.length < 5) return null;
+  return phone.slice(2, 5);
+}
+
+function chooseLocalNumberForLead(leadPhone) {
+  const area = getAreaCode(leadPhone);
+  if (area && localPresenceMap[area]) return normalizePhone(localPresenceMap[area]);
+  return defaultCallerId;
+}
+
+// =========================
+//   METRICS HELPERS
+// =========================
+
+function ensureAgentMetrics(agentId) {
+  if (!metricsByAgent[agentId]) {
+    metricsByAgent[agentId] = {
+      totalCalls: 0,
+      answeredHuman: 0,
+      answeredMachine: 0,
+      noAnswer: 0,
+      busy: 0,
+      failed: 0,
+      conversions: 0,
+      lastOutcome: null,
+      lastLeadName: null,
+      lastTimestamp: null,
+      lastActivityMs: null,
+      totalTalkTimeSec: 0,
+      lastCallDurationSec: 0,
+      avgCallDurationSec: 0,
+      completedCallCount: 0
+    };
+  }
+  return metricsByAgent[agentId];
+}
+
+function markAgentActivity(agentId) {
+  const m = ensureAgentMetrics(agentId);
+  m.lastActivityMs = Date.now();
+}
+
+function getAgentStatus(agentId) {
+  const m = ensureAgentMetrics(agentId);
+  if (!m.lastActivityMs) return 'offline';
+
+  const diffMinutes = (Date.now() - m.lastActivityMs) / 60000;
+
+  if (diffMinutes <= 2) return 'online';
+  if (diffMinutes <= 10) return 'away';
+  return 'offline';
+}
+
+// =========================
+//      FRONTEND ROUTES
+// =========================
+
+app.get('/dialer', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'dialer.html'));
+});
+
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// campaigns list (agent-safe)
+app.get('/api/campaigns', (req, res) => {
+  res.json(listCampaignArray());
+});
+
+app.get('/api/metrics/:agentId', (req, res) => {
+  const { agentId } = req.params;
+  const metrics = ensureAgentMetrics(agentId);
+  const status = getAgentStatus(agentId);
+  const statusDurationSec = metrics.lastActivityMs
+    ? Math.floor((Date.now() - metrics.lastActivityMs) / 1000)
+    : null;
+  res.json({
+    agentId,
+    metrics: {
+      ...metrics,
+      status,
+      statusDurationSec
+    }
+  });
+});
+
+// leaderboard used by admin dashboard
+app.get('/api/leaderboard', (req, res) => {
+  const rows = Object.entries(metricsByAgent).map(([agentId, m]) => {
+    const status = getAgentStatus(agentId);
+    const statusDurationSec = m.lastActivityMs
+      ? Math.floor((Date.now() - m.lastActivityMs) / 1000)
+      : null;
+    return {
+      agentId,
+      totalCalls: m.totalCalls || 0,
+      live: m.answeredHuman || 0,
+      conversions: m.conversions || 0,
+      status,
+      statusDurationSec,
+      avgCallDurationSec: m.avgCallDurationSec || 0,
+      lastCallDurationSec: m.lastCallDurationSec || 0,
+      totalTalkTimeSec: m.totalTalkTimeSec || 0,
+      completedCallCount: m.completedCallCount || 0
+    };
+  });
+
+  rows.sort((a, b) => {
+    if (b.conversions !== a.conversions) return b.conversions - a.conversions;
+    return b.live - a.live;
+  });
+
+  rows.forEach((row, index) => {
+    row.rank = index + 1;
+  });
+
+  let onlineCount = 0;
+  let awayCount = 0;
+  let offlineCount = 0;
+  let totalTalkTimeSec = 0;
+  let totalCompletedCalls = 0;
+  let lastCallDurationSec = 0;
+
+  rows.forEach(row => {
+    if (row.status === 'online') onlineCount += 1;
+    else if (row.status === 'away') awayCount += 1;
+    else offlineCount += 1;
+
+    totalTalkTimeSec += row.totalTalkTimeSec || 0;
+    totalCompletedCalls += row.completedCallCount || 0;
+    if ((row.lastCallDurationSec || 0) > 0) {
+      lastCallDurationSec = row.lastCallDurationSec;
+    }
+  });
+
+  const avgCallDurationSec = totalCompletedCalls
+    ? Math.round(totalTalkTimeSec / totalCompletedCalls)
+    : 0;
+
+  const sessionAgentId = req.session.agentId
+    ? String(req.session.agentId)
+    : null;
+  const queryAgentId = req.query.agentId;
+  const meId = sessionAgentId || queryAgentId || null;
+
+  let me = null;
+  if (meId) {
+    me = rows.find(r => r.agentId === String(meId)) || null;
+  }
+
+  res.json({
+    totalAgents: rows.length,
+    onlineAgents: onlineCount,
+    awayAgents: awayCount,
+    offlineAgents: offlineCount,
+    avgCallDurationSec,
+    lastCallDurationSec,
+    me,
+    top: rows
+  });
+});
+
+// =========================
+//        DIALER API
+// =========================
+
+app.post('/api/dialer/next', async (req, res) => {
+  const agentId = requireAgent(req, res);
+  if (!agentId) return;
+
+  const { campaignId } = req.body || {};
+  const sessionCampaignId = req.session.assignedCampaignId || null;
+  const resolvedCampaignId = campaignId || sessionCampaignId || null;
+  if (sessionCampaignId && campaignId && sessionCampaignId !== campaignId) {
+    return res.status(400).json({ success: false, error: 'Assigned campaign mismatch' });
+  }
+  if (!resolvedCampaignId) {
+    return res.status(400).json({ success: false, error: 'No campaign assigned to agent' });
+  }
+  const campaign = campaigns[resolvedCampaignId];
+  if (!campaign) {
+    return res.status(400).json({ success: false, error: 'Invalid campaign' });
+  }
+
+  const dialConfig = getUserDialConfig(agentId);
+  if (!dialConfig) {
+    return res.status(400).json({ success: false, error: 'No dial target configured for this agent.' });
+  }
+
+  let lead = null;
+  if (isGhlCampaign(campaign)) {
+    lead = await fetchGhlLeadForCampaign(campaign);
+  }
+  if (!lead) {
+    lead = popLocalLead(resolvedCampaignId);
+  }
+  if (!lead) {
+    return res.json({ success: false, error: 'No leads in queue for this campaign' });
+  }
+  const fromNumber =
+    dialConfig.dialTarget ||
+    chooseLocalNumberForLead(lead.phone) ||
+    defaultCallerId;
+  console.log('[Dialer outbound]', { agentId, fromNumber, slotId: dialConfig.slotId, leadPhone: lead.phone });
+
+  try {
+    const call = await client.calls.create({
+      to: lead.phone,
+      from: fromNumber,
+      url: `${BASE_URL}/twilio/voice?agentId=${agentId}`,
+      statusCallback: `${BASE_URL}/twilio/status`,
+      statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+      ...(appSettings.machineDetectionEnabled
+        ? { machineDetection: 'Enable', machineDetectionTimeout: 30 }
+        : {})
+    });
+
+    const leadPayload = {
+      ...lead,
+      campaignId: resolvedCampaignId,
+      campaignName: campaign.name
+    };
+
+    callMap[call.sid] = { agentId, lead: leadPayload, campaignId: resolvedCampaignId };
+    activeCallByAgent[agentId] = call.sid;
+    lastAgentByNumber[lead.phone] = agentId;
+
+    const m = ensureAgentMetrics(agentId);
+    m.totalCalls += 1;
+    markAgentActivity(agentId);
+
+    activeLeadMetaByAgent[agentId] = {
+      ghlOpportunityId: leadPayload.ghlOpportunityId || null,
+      ghlContactId: leadPayload.ghlContactId || null,
+      campaignId: resolvedCampaignId,
+      campaignTag: leadPayload.campaignTag || campaign.ghlTag || null,
+      localLeadId: leadPayload.localLeadId || null,
+      localLeadName: leadPayload.name || null,
+      localLeadPhone: leadPayload.phone || null
+    };
+    markRecentlyDialed(resolvedCampaignId, leadPayload.phone, leadPayload.ghlContactId || leadPayload.id || leadPayload.localLeadId || null);
+
+    const responseLead = { ...leadPayload };
+    delete responseLead.ghlOpportunityId;
+    delete responseLead.ghlContactId;
+    delete responseLead.campaignTag;
+    // keep localLeadId on response to show richer UI when offline leads are used
+
+    res.json({
+      success: true,
+      twilioCallSid: call.sid,
+      fromNumber,
+      lead: responseLead
+    });
+  } catch (err) {
+    console.error('Error creating outbound call:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Twilio calls this when connecting the agent leg. Keep this resilient to avoid “application error”.
+app.all('/twilio/voice', (req, res) => {
+  const VoiceResponse = twilio.twiml.VoiceResponse;
+  const twiml = new VoiceResponse();
+
+  try {
+    const agentId = req.query.agentId;         // e.g. "outbound1"
+    const answeredBy = req.body.AnsweredBy;    // "human" | "machine" | undefined
+    const toNumber = req.body.To || null;
+
+    console.log('Voice webhook – AnsweredBy:', answeredBy, 'Agent:', agentId, 'To:', toNumber);
+
+    const machineDetectionOn = appSettings.machineDetectionEnabled;
+    const callRecordingOn = appSettings.callRecordingEnabled;
+
+    // Keep the lock tag set during live call (if we have contact meta)
+    const meta = agentId ? activeLeadMetaByAgent[agentId] : null;
+    if (answeredBy && meta && meta.ghlContactId) {
+      ghlAddTags(meta.ghlContactId, [DIALER_LOCK_TAG]).catch(() => {});
+    }
+
+    if (machineDetectionOn && answeredBy === 'machine') {
+      twiml.hangup();
+    } else {
+      if (!agentId) {
+        const fromNumber = req.body.From || req.query.From || null;
+        const success = buildSequentialInbound(twiml, fromNumber, toNumber);
+        if (!success) {
+          twiml.say('No agents available. Please try again later.');
+          twiml.hangup();
+        }
+      } else {
+        const dialOptions = {};
+        if (toNumber) dialOptions.callerId = toNumber; // optional callerId
+
+        if (callRecordingOn) {
+          dialOptions.record = 'record-from-answer-dual';
+          if (BASE_URL) {
+            dialOptions.recordingStatusCallback = `${BASE_URL}/twilio/recording`;
+            dialOptions.recordingStatusCallbackEvent = 'in-progress completed';
+          }
+        }
+
+        const dial = twiml.dial(dialOptions);
+        dial.client(agentId);
+      }
+    }
+  } catch (err) {
+    console.error('Voice webhook error:', err);
+    twiml.say('An application error occurred.');
+    twiml.hangup();
+  }
+
+  res.type('text/xml');
+  res.send(twiml.toString());
+});
+
+app.all('/twilio/status', (req, res) => {
+  const payload = req.body && Object.keys(req.body).length ? req.body : req.query || {};
+  const { CallSid, CallStatus, AnsweredBy, CallDuration } = payload;
+
+  console.log('[Twilio status]', req.method, 'CallSid:', CallSid, 'Status:', CallStatus, 'AnsweredBy:', AnsweredBy);
+
+  const callInfo = callMap[CallSid];
+  if (!callInfo) {
+    return res.json({ received: true });
+  }
+
+  // If manual call answered, create contact/tag once
+  if (callInfo.manual && CallStatus === 'answered' && !callInfo.manual.contactCreated) {
+    (async () => {
+      const phone = callInfo.manual.toNumber;
+      const campaignId = callInfo.manual.campaignId || null;
+      const campaign = campaignId ? campaigns[campaignId] : null;
+      const tagList = [];
+      if (campaign?.ghlTag) tagList.push(campaign.ghlTag);
+      const contact = await ghlCreateContact({
+        firstName: callInfo.manual.displayName || 'Manual Dial',
+        phone,
+        tags: tagList,
+        locationId: GHL_LOCATION_ID
+      });
+      if (contact && contact.id) {
+        callInfo.lead = {
+          id: contact.id,
+          name: contact.displayName || contact.firstName || contact.lastName || phone,
+          phone,
+          ghlContactId: contact.id,
+          campaignId,
+          campaignTag: campaign?.ghlTag || null
+        };
+        callInfo.manual.contactCreated = true;
+      }
+    })().catch(err => console.error('manual contact create failed', err.message));
+  }
+
+  const { agentId } = callInfo;
+  const m = ensureAgentMetrics(agentId);
+
+  if (CallStatus === 'completed') {
+    if (AnsweredBy === 'human') m.answeredHuman += 1;
+    if (AnsweredBy === 'machine') m.answeredMachine += 1;
+    const durationSec = parseInt(CallDuration, 10);
+    if (!Number.isNaN(durationSec) && durationSec >= 0) {
+      m.totalTalkTimeSec += durationSec;
+      m.lastCallDurationSec = durationSec;
+      m.completedCallCount += 1;
+      if (m.completedCallCount > 0) {
+        m.avgCallDurationSec = Math.round(m.totalTalkTimeSec / m.completedCallCount);
+      }
+    }
+  } else if (CallStatus === 'no-answer') {
+    m.noAnswer += 1;
+  } else if (CallStatus === 'busy') {
+    m.busy += 1;
+  } else if (CallStatus === 'failed') {
+    m.failed += 1;
+  }
+
+  markAgentActivity(agentId);
+
+  if (CallStatus === 'completed') {
+    if (activeCallByAgent[agentId] === CallSid) {
+      delete activeCallByAgent[agentId];
+    }
+    // unlock contact if we have it
+    const lead = callInfo.lead || {};
+    const contactId = lead.ghlContactId || lead.id || null;
+    if (contactId) {
+      unlockContact(contactId);
+    }
+  }
+
+  res.json({ received: true });
+});
+
+app.post('/twilio/recording', (req, res) => {
+  console.log('Recording callback:', req.body.CallSid, req.body.RecordingUrl, req.body.RecordingStatus);
+  res.json({ received: true });
+});
+
+app.post('/api/disposition', async (req, res) => {
+  const { agentId, campaignId, outcome, notes, leadPhone, leadName } = req.body;
+
+  const safeOutcome = outcome || 'other';
+  console.log('Disposition:', {
+    agentId,
+    campaignId,
+    outcome: safeOutcome,
+    leadPhone,
+    leadName
+  });
+
+  const m = ensureAgentMetrics(agentId);
+  const metricOutcomeMap = {
+    connected: 'answeredHuman',
+    booked: 'answeredHuman',
+    not_interested: 'answeredHuman',
+    callback_requested: 'answeredHuman',
+    gatekeeper_transfer: 'answeredHuman',
+    wrong_contact: 'answeredHuman',
+    machine: 'answeredMachine',
+    machine_voicemail: 'answeredMachine',
+    no_answer: 'noAnswer',
+    busy: 'busy',
+    failed: 'failed',
+    bad_number: 'failed'
+  };
+
+  const metricKey = metricOutcomeMap[safeOutcome];
+  if (metricKey && typeof m[metricKey] === 'number') {
+    m[metricKey] += 1;
+  }
+
+  if (safeOutcome === 'booked') m.conversions += 1;
+
+  m.lastOutcome = safeOutcome;
+  m.lastLeadName = leadName || null;
+  m.lastTimestamp = new Date().toISOString();
+
+  recordCampaignDisposition(campaignId, agentId, safeOutcome);
+
+  const dialInfo = getUserDialConfig(agentId);
+  const meta = activeLeadMetaByAgent[agentId];
+  const activeCallSid = activeCallByAgent[agentId] || null;
+  const isAutosyncConnect = safeOutcome === 'connected';
+  if (meta) {
+    if (!isAutosyncConnect) {
+      try {
+        await handleGhlDisposition(
+          agentId,
+          campaignId || meta.campaignId,
+          meta,
+          safeOutcome,
+          notes,
+          { leadPhone, leadName }
+        );
+      } catch (err) {
+        console.error('Error syncing disposition to GHL:', err.response?.data || err.message);
+      }
+      if (meta.localLeadId) {
+        recordLocalLeadOutcome(
+          campaignId || meta.campaignId,
+          meta,
+          safeOutcome,
+          notes,
+          { leadPhone, leadName }
+        );
+      }
+      delete activeLeadMetaByAgent[agentId];
+    }
+  }
+
+  // End the active call if it exists
+  if (activeCallSid && !isAutosyncConnect) {
+    try {
+      await client.calls(activeCallSid).update({ status: 'completed' });
+    } catch (err) {
+      console.error('Error hanging up call for disposition:', err.message);
+    } finally {
+      if (activeCallByAgent[agentId] === activeCallSid) {
+        delete activeCallByAgent[agentId];
+      }
+    }
+  }
+
+  if (ZAPIER_HOOK_URL) {
+    try {
+      await axios.post(ZAPIER_HOOK_URL, {
+        type: 'agent_disposition',
+        outcome: safeOutcome,
+        notes,
+        leadPhone,
+        leadName,
+   agentId,
+   agentName: dialInfo?.name || agentId,
+   campaignId,
+    timestamp: m.lastTimestamp
+  });
+    } catch (err) {
+      console.error('Error sending disposition to Zapier:', err.message);
+    }
+  }
+
+  if (SLACK_WEBHOOK_URL && safeOutcome === 'booked') {
+    try {
+      const text = [
+        `🎯 *BOOKED DEMO*`,
+        `• Agent: *${dialInfo?.name || agentId}* (ID: ${agentId})`,
+        `• Lead: *${leadName || 'Unknown'}*`,
+        `• Phone: \`${leadPhone || 'N/A'}\``,
+        campaignId ? `• Campaign: \`${campaignId}\`` : null,
+        notes ? `• Notes: ${notes}` : null,
+        '',
+        `_Rehash Dialer • RevCoreHQ_`
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      await axios.post(SLACK_WEBHOOK_URL, { text });
+    } catch (err) {
+      console.error('Error sending Slack notification:', err.message);
+    }
+  }
+
+  res.json({ success: true });
+});
+
+// health check
+app.get('/', (req, res) => {
+  res.send('Rehash Dialer backend is running.');
+});
+
+// =========================
+//   SIMPLE ADMIN METRICS PAGE
+// =========================
+
+app.get('/metrics-admin', (req, res) => {
+  let rows = '';
+
+  Object.values(agentSlots).forEach(agent => {
+    const stats = ensureAgentMetrics(agent.id);
+
+    rows += `
+      <tr>
+        <td>${agent.id}</td>
+        <td>${agent.name}</td>
+        <td>${stats.totalCalls || 0}</td>
+        <td>${stats.answeredHuman || 0}</td>
+        <td>${stats.conversions || 0}</td>
+        <td>${stats.lastOutcome || '-'}</td>
+        <td>${stats.lastLeadName || '-'}</td>
+        <td>${stats.lastTimestamp || '-'}</td>
+      </tr>
+    `;
+  });
+
+  const html = `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Rehash Dialer Admin</title>
+        <style>
+          body {
+            margin: 0;
+            padding: 24px;
+            font-family: -apple-system, system-ui, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+            background: radial-gradient(circle at top, #020617, #020617 40%, #020617 100%);
+            color: #e5f1ff;
+          }
+          h1 {
+            font-size: 22px;
+            margin: 8px 0 4px;
+          }
+          h2 {
+            font-size: 13px;
+            margin: 0 0 20px;
+            opacity: 0.7;
+          }
+          .pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 9px;
+            border-radius: 999px;
+            font-size: 11px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            border: 1px solid rgba(74, 222, 128, 0.5);
+            color: #4ade80;
+          }
+          table {
+            border-collapse: collapse;
+            width: 100%;
+            max-width: 960px;
+            background: rgba(15,23,42,0.98);
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: 0 22px 60px rgba(0,0,0,0.7);
+          }
+          th, td {
+            padding: 10px 14px;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(148,163,184,0.26);
+          }
+          th {
+            text-align: left;
+            background: rgba(15,23,42,1);
+            font-weight: 500;
+          }
+          tr:last-child td {
+            border-bottom: none;
+          }
+        </style>
+      </head>
+      <body>
+        <div style="margin-bottom: 18px;">
+          <div class="pill">Rehash Dialer · Admin</div>
+          <h1>Agent Overview</h1>
+          <h2>Live metrics for all outbound agents using the dialer.</h2>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Agent</th>
+              <th>Total Calls</th>
+              <th>Live Connects</th>
+              <th>Conversions</th>
+              <th>Last Outcome</th>
+              <th>Last Lead</th>
+              <th>Last Timestamp</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  res.send(html);
+});
+
+// =========================
+//        START SERVER
+// =========================
+
+const listenPort = PORT || 3000;
+app.listen(listenPort, () => {
+  console.log(`Rehash Dialer server listening on port ${listenPort}`);
+});
