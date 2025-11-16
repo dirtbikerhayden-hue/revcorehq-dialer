@@ -2418,11 +2418,12 @@ app.get('/metrics-admin', (req, res) => {
   res.send(html);
 });
 
-// =========================
-//        START SERVER
-// =========================
+// =====================
+// START SERVER
+// =====================
 
-const listenPort = PORT || 3000;
+const listenPort = process.env.PORT || 3000;
+
 app.listen(listenPort, () => {
   console.log(`Rehash Dialer server listening on port ${listenPort}`);
 });
