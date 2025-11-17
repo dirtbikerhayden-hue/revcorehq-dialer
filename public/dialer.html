@@ -1093,6 +1093,26 @@
     input::selection {
       background: rgba(77, 243, 163, 0.25);
     }
+
+    .callback-row {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--text-soft);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .callback-label {
+      opacity: 0.8;
+    }
+
+    .callback-value {
+      font-weight: 500;
+      color: var(--accent);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
   </style>
 
   <!-- Twilio Voice SDK v2 (UMD build exposes `Twilio.Device`) -->
@@ -1151,12 +1171,16 @@
           </div>
         </div>
 
-        <div class="status-bar">
-          <div class="status-text" id="statusText">
-            Standing by. Waiting for campaign assignment.
-          </div>
-          <div class="status-chip paused" id="sessionChip">Paused</div>
+      <div class="status-bar">
+        <div class="status-text" id="statusText">
+          Standing by. Waiting for campaign assignment.
         </div>
+        <div class="status-chip paused" id="sessionChip">Paused</div>
+      </div>
+      <div class="callback-row">
+        <span class="callback-label">Your Callback Number</span>
+        <span class="callback-value" id="callbackNumberDisplay">Auto (local presence / default)</span>
+      </div>
         <div class="call-utility-row">
           <button id="btnMute" class="btn-ghost" disabled>Mute Mic</button>
         </div>
@@ -1394,6 +1418,7 @@
     // will be set from /login or /me
     let agentId = null;
     let allowAfterHoursOverride = false;
+    let agentCallbackNumber = null;
 
     const DAILY_GOAL_LIVE = 120;
     const DAILY_GOAL_BOOKED = 4;
@@ -1457,6 +1482,7 @@
     const agentPillEl         = document.getElementById('agentPill');
     const assignedCampaignDisplayEl = document.getElementById('assignedCampaignDisplay');
     const assignedCampaignNoteEl = document.getElementById('assignedCampaignNote');
+    const callbackNumberDisplayEl = document.getElementById('callbackNumberDisplay');
     const avgDurationEl       = document.getElementById('m-avg-duration');
     const lastDurationEl      = document.getElementById('m-last-duration');
     const goalLiveCountEl     = document.getElementById('goalLiveCount');
@@ -1572,6 +1598,15 @@
       const estTime = `${estParts.hour || '--'}:${estParts.minute || '--'} ${estParts.dayPeriod || estParts.dayperiod || ''}`.trim();
       const pstTime = `${pstParts.hour || '--'}:${pstParts.minute || '--'} ${pstParts.dayPeriod || pstParts.dayperiod || ''}`.trim();
       return `Outbound dialing is limited to <span>Mon–Sat, 9:00AM–5:00PM</span>.<br/>Current time: <span>${estTime} EST</span> / <span>${pstTime} PST</span>.`;
+    }
+
+    function updateCallbackNumberDisplay() {
+      if (!callbackNumberDisplayEl) return;
+      if (agentCallbackNumber) {
+        callbackNumberDisplayEl.textContent = agentCallbackNumber;
+      } else {
+        callbackNumberDisplayEl.textContent = 'Auto (local presence / default)';
+      }
     }
 
     function setAgentLabel(label) {
@@ -2692,6 +2727,8 @@
         // success
         agentId = data.agentId || username;
         allowAfterHoursOverride = !!data.allowAfterHours;
+        agentCallbackNumber = data.callbackNumber || null;
+        updateCallbackNumberDisplay();
         _rehashUpdateAgentBadge(data.agentName || username);
         setAssignedCampaign(data.campaignId || null, data.campaignName || '');
         errBox.textContent = 'Preparing your softphone…';
@@ -2726,6 +2763,8 @@
         if (data.loggedIn) {
           agentId = data.agentId;
           allowAfterHoursOverride = !!data.allowAfterHours;
+          agentCallbackNumber = data.callbackNumber || null;
+          updateCallbackNumberDisplay();
           _rehashUpdateAgentBadge(data.agentName || data.agentId || 'Agent');
           setAssignedCampaign(data.campaignId || null, data.campaignName || '');
           console.log('[Dialer] Session already logged in as', agentId, '- setting up Twilio Device');

@@ -1611,11 +1611,14 @@ app.post('/login', express.json(), (req, res) => {
 
   console.log('Agent logged in:', normalizedUsername);
 
+  const callbackNumber = getDialNumberForAgent(normalizedUsername) || null;
+
   return res.json({
     success: true,
     agentId: normalizedUsername,
     agentName: normalizedUsername,
     allowAfterHours: !!user.allowAfterHours,
+    callbackNumber,
     campaignId: assignedCampaignId,
     campaignName: assignedCampaignId ? (campaigns[assignedCampaignId]?.name || assignedCampaignId) : null
   });
@@ -1628,12 +1631,14 @@ app.get('/me', (req, res) => {
   }
 
   const user = users[req.session.agentId] || {};
+  const callbackNumber = getDialNumberForAgent(req.session.agentId) || null;
 
   return res.json({
     loggedIn: true,
     agentId: req.session.agentId,
     agentName: req.session.agentName,
     allowAfterHours: !!user.allowAfterHours,
+    callbackNumber,
     campaignId: req.session.assignedCampaignId || null,
     campaignName: req.session.assignedCampaignId
       ? (campaigns[req.session.assignedCampaignId]?.name || req.session.assignedCampaignId)
