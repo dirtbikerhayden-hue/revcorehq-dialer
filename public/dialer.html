@@ -178,6 +178,23 @@
       margin-bottom: 12px;
     }
 
+    .clock-display {
+      font-size: 0.78rem;
+      color: var(--text-subtle);
+      text-align: right;
+      line-height: 1.2;
+    }
+
+    .clock-line-main {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .clock-line-secondary {
+      font-size: 0.72rem;
+      opacity: 0.9;
+    }
+
     .title-block h1 {
       font-size: 1.12rem;
       margin: 0 0 4px;
@@ -1100,6 +1117,10 @@
             <h1>REHASH DIALER • REVCORE</h1>
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+            <div class="clock-display">
+              <div class="clock-line-main" id="clockEST">EST: --:-- --</div>
+              <div class="clock-line-secondary" id="clockPST">PST: --:-- --</div>
+            </div>
             <div class="agent-pill" id="agentPill">
               <span class="agent-pill-dot"></span>
               <div class="agent-pill-text">
@@ -1460,6 +1481,8 @@
     const incomingRejectBtn   = document.getElementById('incomingRejectBtn');
     const incomingMuteBtn     = document.getElementById('incomingMuteBtn');
     const incomingEndBtn      = document.getElementById('incomingEndBtn');
+    const clockEstEl          = document.getElementById('clockEST');
+    const clockPstEl          = document.getElementById('clockPST');
     const canRequestSpeakerSelection =
       typeof document.createElement === 'function' &&
       typeof document.createElement('audio').setSinkId === 'function';
@@ -1472,6 +1495,83 @@
       bad_number: 'Bad Number',
       booked: 'Booked Demo'
     };
+
+    const BUSINESS_TIMEZONE = 'America/New_York';
+    const BUSINESS_OPEN_HOUR = 9;
+    const BUSINESS_CLOSE_HOUR = 20;
+
+    function getZonedTimeParts(timeZone) {
+      const now = new Date();
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      }).formatToParts(now);
+      const map = {};
+      parts.forEach(p => {
+        if (p.type && p.type !== 'literal') {
+          map[p.type] = p.value;
+        }
+      });
+      return map;
+    }
+
+    function getBusinessTimeInfo() {
+      const now = new Date();
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: BUSINESS_TIMEZONE,
+        weekday: 'short',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false
+      }).formatToParts(now);
+      const map = {};
+      parts.forEach(p => {
+        if (p.type && p.type !== 'literal') {
+          map[p.type] = p.value;
+        }
+      });
+      const weekday = map.weekday;
+      const hour = parseInt(map.hour, 10);
+      const minute = parseInt(map.minute || '0', 10);
+      return { weekday, hour, minute };
+    }
+
+    function isWithinBusinessHoursClient() {
+      const { weekday, hour, minute } = getBusinessTimeInfo();
+      const isBusinessDay = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].includes(weekday);
+      if (!isBusinessDay) return false;
+      if (hour < BUSINESS_OPEN_HOUR) return false;
+      if (hour > BUSINESS_CLOSE_HOUR) return false;
+      if (hour === BUSINESS_CLOSE_HOUR && minute > 0) return false;
+      return true;
+    }
+
+    function formatClockLine(label, timeZone) {
+      const parts = getZonedTimeParts(timeZone);
+      const hour = parts.hour || '--';
+      const minute = parts.minute || '--';
+      const dayPeriod = parts.dayPeriod || parts.dayperiod || '';
+      return `${label}: ${hour}:${minute} ${dayPeriod}`.trim();
+    }
+
+    function updateClocks() {
+      if (clockEstEl) {
+        clockEstEl.textContent = formatClockLine('EST', 'America/New_York');
+      }
+      if (clockPstEl) {
+        clockPstEl.textContent = formatClockLine('PST', 'America/Los_Angeles');
+      }
+    }
+
+    function getBusinessHoursBlockedMessage() {
+      const estParts = getZonedTimeParts('America/New_York');
+      const pstParts = getZonedTimeParts('America/Los_Angeles');
+      const estTime = `${estParts.hour || '--'}:${estParts.minute || '--'} ${estParts.dayPeriod || estParts.dayperiod || ''}`.trim();
+      const pstTime = `${pstParts.hour || '--'}:${pstParts.minute || '--'} ${pstParts.dayPeriod || pstParts.dayperiod || ''}`.trim();
+      return `Outbound dialing is limited to <span>Mon–Sat, 9:00AM–8:00PM EST</span>.<br/>Current time: <span>${estTime} EST</span> / <span>${pstTime} PST</span>.`;
+    }
 
     function setAgentLabel(label) {
       agentLabelEl.textContent = `Agent • ${label}`;
@@ -1878,6 +1978,10 @@
         statusTextEl.innerHTML = 'Finish the current <span>live call</span> before dialing again.';
         return;
       }
+      if (!isWithinBusinessHoursClient()) {
+        statusTextEl.innerHTML = getBusinessHoursBlockedMessage();
+        return;
+      }
       try {
         await ensureAudioAccess();
       } catch (err) {
@@ -2091,6 +2195,15 @@
       const number = '+1' + document.getElementById('manualNumber').value.replace(/[^\d]/g, '').replace(/^1/, '');
       const caller = document.getElementById('manualCallerId').value.trim();
       const status = document.getElementById('manualStatus');
+      if (!isWithinBusinessHoursClient()) {
+        const msg = getBusinessHoursBlockedMessage();
+        if (status) {
+          status.innerHTML = msg;
+        } else {
+          statusTextEl.innerHTML = msg;
+        }
+        return;
+      }
       if (status) status.textContent = 'Dialing…';
       pendingManualPhone = number;
       try {
@@ -2224,6 +2337,8 @@
 
     setSessionState('paused');
     setCurrentLead(null);
+    updateClocks();
+    setInterval(updateClocks, 1000);
     setInterval(fetchMetrics, 15000);
     setInterval(fetchLeaderboard, 20000);
     renderLogs();

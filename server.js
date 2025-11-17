@@ -327,6 +327,24 @@ function getEasternNow() {
   return new Date(easternString);
 }
 
+const BUSINESS_OPEN_HOUR = 9;  // 9:00 AM
+const BUSINESS_CLOSE_HOUR = 20; // 8:00 PM
+
+function isWithinBusinessHours(easternDate) {
+  const day = easternDate.getDay(); // 0 = Sun, 1 = Mon, ...
+  const hour = easternDate.getHours();
+  const minute = easternDate.getMinutes();
+
+  // Business days: Monday (1) through Saturday (6)
+  if (day === 0) return false;
+
+  if (hour < BUSINESS_OPEN_HOUR) return false;
+  if (hour > BUSINESS_CLOSE_HOUR) return false;
+  if (hour === BUSINESS_CLOSE_HOUR && minute > 0) return false;
+
+  return true;
+}
+
 function getLeaderboardWeekId(easternDate) {
   const d = new Date(easternDate.getTime());
   const day = d.getDay(); // 0 = Sun, 1 = Mon, ...
@@ -1353,6 +1371,13 @@ app.post('/api/manual-dial', express.json(), async (req, res) => {
   if (!agentId) return;
   const easternNow = getEasternNow();
   const reportDateId = getDateId(easternNow);
+
+  if (!isWithinBusinessHours(easternNow)) {
+    return res.status(403).json({
+      ok: false,
+      error: 'Manual dialing is only allowed between 9:00AM and 8:00PM EST, Monday–Saturday.'
+    });
+  }
 
   const { toNumber, callerId, campaignId, reason } = req.body || {};
   if (!toNumber) {
@@ -2386,6 +2411,13 @@ app.post('/api/dialer/next', async (req, res) => {
   if (!agentId) return;
   const easternNow = ensureLeaderboardWeek();
   const reportDateId = getDateId(easternNow);
+
+  if (!isWithinBusinessHours(easternNow)) {
+    return res.status(403).json({
+      success: false,
+      error: 'Outbound dialing is only allowed between 9:00AM and 8:00PM EST, Monday–Saturday.'
+    });
+  }
 
   const { campaignId } = req.body || {};
   const sessionCampaignId = req.session.assignedCampaignId || null;

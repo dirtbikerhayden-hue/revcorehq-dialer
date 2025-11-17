@@ -74,6 +74,13 @@
     flex-wrap: wrap;
   }
 
+  .top-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+  }
+
   .brand {
     display: flex;
     align-items: center;
@@ -109,6 +116,23 @@
     color: var(--muted);
     letter-spacing: 0.14em;
     text-transform: uppercase;
+  }
+
+  .clock-display {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: right;
+    line-height: 1.2;
+  }
+
+  .clock-line-main {
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .clock-line-secondary {
+    font-size: 11px;
+    opacity: 0.9;
   }
 
   .pill {
@@ -695,9 +719,15 @@
           <div class="brand-text-sub">Dialer · Admin Control</div>
         </div>
       </div>
-      <div class="pill">
-        <span class="pill-dot"></span>
-        LIVE PIPELINE VIEW
+      <div class="top-right">
+        <div class="clock-display">
+          <div class="clock-line-main" id="adminClockEST">EST: --:-- --</div>
+          <div class="clock-line-secondary" id="adminClockPST">PST: --:-- --</div>
+        </div>
+        <div class="pill">
+          <span class="pill-dot"></span>
+          LIVE PIPELINE VIEW
+        </div>
       </div>
     </div>
 
@@ -1260,6 +1290,40 @@
     const localFileInput = document.getElementById('localFileInput');
     const localUploadBtn = document.getElementById('localUploadBtn');
     const localUploadStatus = document.getElementById('localUploadStatus');
+    const clockEstEl = document.getElementById('adminClockEST');
+    const clockPstEl = document.getElementById('adminClockPST');
+
+    function updateAdminClocks() {
+      if (!clockEstEl && !clockPstEl) return;
+      const now = new Date();
+      const formatLine = (label, timeZone) => {
+        const parts = new Intl.DateTimeFormat('en-US', {
+          timeZone,
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        }).formatToParts(now);
+        const map = {};
+        parts.forEach(p => {
+          if (p.type && p.type !== 'literal') {
+            map[p.type] = p.value;
+          }
+        });
+        const hour = map.hour || '--';
+        const minute = map.minute || '--';
+        const dayPeriod = map.dayPeriod || map.dayperiod || '';
+        return `${label}: ${hour}:${minute} ${dayPeriod}`.trim();
+      };
+      if (clockEstEl) {
+        clockEstEl.textContent = formatLine('EST', 'America/New_York');
+      }
+      if (clockPstEl) {
+        clockPstEl.textContent = formatLine('PST', 'America/Los_Angeles');
+      }
+    }
+
+    updateAdminClocks();
+    setInterval(updateAdminClocks, 1000);
 
     function setStatus(el, msg, ok = true) {
       el.textContent = msg || "";
