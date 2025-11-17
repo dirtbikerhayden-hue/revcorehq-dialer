@@ -2111,6 +2111,11 @@ async function fetchGhlLeadForCampaign(campaign) {
 
         const contactKey = String(contactId || contact.id);
         const contactStats = byContact[contactKey];
+
+        // Skip if this contact has already been marked as a bad number
+        if (contactStats && contactStats.lastOutcome === 'bad_number') {
+          continue;
+        }
         if (contactStats && NON_PICKUP_OUTCOMES.includes(contactStats.lastOutcome || '')) {
           const now = Date.now();
           if (contactStats.lastAttemptMs && (now - contactStats.lastAttemptMs) < NON_PICKUP_COOLDOWN_MS) {
@@ -2811,7 +2816,7 @@ app.all('/twilio/status', (req, res) => {
     }
   }
 
-  if (CallStatus === 'completed') {
+  if (CallStatus === 'completed' || CallStatus === 'failed' || CallStatus === 'busy' || CallStatus === 'no-answer') {
     if (activeCallByAgent[agentId] === CallSid) {
       delete activeCallByAgent[agentId];
     }
