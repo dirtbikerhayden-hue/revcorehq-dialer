@@ -91,6 +91,7 @@ const AGENT_SLOTS_FILE = path.join(DATA_DIR, 'agent-slots.json');
 const LOCAL_PRESENCE_FILE = path.join(DATA_DIR, 'local-presence.json');
 const REPORT_METRICS_FILE = path.join(DATA_DIR, 'report-metrics.json');
 const RECENT_DIAL_FILE = path.join(DATA_DIR, 'recent-dials.json');
+const AGENT_METRICS_FILE = path.join(DATA_DIR, 'agent-metrics.json');
 // High-priority inbound agents can be set later via config; default empty.
 const PRIORITY_INBOUND_AGENTS = [];
 
@@ -214,6 +215,29 @@ function listCampaignArray() {
 const DEFAULT_CAMPAIGN_STATS = {};
 const DEFAULT_LOCAL_LEADS = { queue: {}, completed: {} };
 const RECENT_DIAL_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+function loadAgentMetricsStore() {
+  try {
+    if (!fs.existsSync(AGENT_METRICS_FILE)) {
+      return {};
+    }
+    const raw = fs.readFileSync(AGENT_METRICS_FILE, 'utf8');
+    const parsed = JSON.parse(raw) || {};
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed;
+  } catch (err) {
+    console.error('Error loading agent-metrics.json:', err);
+    return {};
+  }
+}
+
+function saveAgentMetricsStore() {
+  try {
+    fs.writeFileSync(AGENT_METRICS_FILE, JSON.stringify(metricsByAgent, null, 2));
+  } catch (err) {
+    console.error('Error saving agent-metrics.json:', err);
+  }
+}
 
 function loadRecentDialMap() {
   try {
@@ -447,6 +471,7 @@ function ensureLeaderboardWeek() {
   const weekId = getLeaderboardWeekId(easternNow);
   if (leaderboardWeekId && leaderboardWeekId !== weekId) {
     Object.keys(metricsByAgent).forEach(key => { delete metricsByAgent[key]; });
+    saveAgentMetricsStore();
   }
   leaderboardWeekId = weekId;
   return easternNow;
@@ -1882,7 +1907,7 @@ function buildSequentialInbound(twiml, fromNumber, toNumber) {
   return true;
 }
 
-const metricsByAgent = {};
+const metricsByAgent = loadAgentMetricsStore();
 const callMap = {};
 const activeLeadMetaByAgent = {};
 const activeCallByAgent = {};
@@ -2722,6 +2747,7 @@ app.all('/twilio/status', (req, res) => {
     }
 
     markAgentActivity(agentId);
+    saveAgentMetricsStore();
   }
 
   if (CallStatus === 'completed') {
@@ -2784,6 +2810,7 @@ app.post('/api/disposition', async (req, res) => {
     m.lastOutcome = safeOutcome;
     m.lastLeadName = leadName || null;
     m.lastTimestamp = new Date().toISOString();
+    saveAgentMetricsStore();
   }
 
   const reportDateId = getDateId(easternNow);
