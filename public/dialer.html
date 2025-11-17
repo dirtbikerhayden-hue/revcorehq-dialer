@@ -2489,6 +2489,15 @@
           if (incomingMetaEl) incomingMetaEl.textContent = `From: ${from}`;
           showIncomingModal();
 
+          // Auto-accept incoming leg while a dialing session is running
+          try {
+            if (sessionState === 'running') {
+              call.accept();
+            }
+          } catch (e) {
+            console.warn('[Dialer] Auto-accept failed:', e);
+          }
+
           call.on('accept', () => {
             const leadName = (currentLead && currentLead.name) || 'Lead';
             bumpCallState('Live call');
