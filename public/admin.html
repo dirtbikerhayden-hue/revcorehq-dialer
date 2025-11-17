@@ -548,9 +548,16 @@
 
   .actions-cell {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     justify-content: flex-end;
     align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .actions-col {
+    width: 140px;
+    text-align: right;
+    white-space: nowrap;
   }
 
   /* STATUS TEXT / BADGES */
@@ -831,7 +838,7 @@
               <th>Outbound #</th>
               <th>Inbound #</th>
               <th>Password</th>
-              <th style="width:1%;">Actions</th>
+              <th class="actions-col">Actions</th>
             </tr>
           </thead>
           <tbody id="usersTableBody">
@@ -876,7 +883,7 @@
               <tr>
                 <th>Area</th>
                 <th>Number</th>
-                <th style="width:1%;">Actions</th>
+                <th class="actions-col">Actions</th>
               </tr>
             </thead>
             <tbody id="lpTableBody">
@@ -966,7 +973,7 @@
                 <th>Tag</th>
                 <th>Total</th>
                 <th>Remaining</th>
-                <th style="width:1%;">Actions</th>
+                <th class="actions-col">Actions</th>
               </tr>
             </thead>
             <tbody id="campaignsTableBody">
