@@ -375,6 +375,8 @@ const DISPOSITION_SKIP_TAGS = [
   'not_interested',
   'wrong_contact',
   'booked',
+  'send_info_email',
+  'send info via email',
   NON_PICKUP_REMOVED_TAG
 ];
 const lastAgentByNumber = {}; // track last agent who called a number
@@ -386,6 +388,7 @@ const OUTCOME_LABELS = {
   machine: 'Machine',
   machine_voicemail: 'Machine / Voicemail',
   bad_number: 'Bad Number',
+  send_info_email: 'Send Info via Email',
   booked: 'Booked Demo',
   connected: 'Connected',
   no_answer: 'No Answer',
@@ -1996,7 +1999,8 @@ async function ghlAddTags(contactId, tags = []) {
   try {
     await ghlClient.post(
       `/contacts/${contactId}/tags/`,
-      { tags }
+      { tags },
+      { params: { locationId: GHL_LOCATION_ID } }
     );
   } catch (err) {
     console.error('Error adding GHL tags:', err.response?.data || err.message);
@@ -2008,7 +2012,8 @@ async function ghlRemoveTags(contactId, tags = []) {
   try {
     await ghlClient.post(
       `/contacts/${contactId}/tags/remove`,
-      { tags }
+      { tags },
+      { params: { locationId: GHL_LOCATION_ID } }
     );
   } catch (err) {
     console.error('Error removing GHL tags:', err.response?.data || err.message);
@@ -2865,6 +2870,7 @@ app.post('/api/disposition', async (req, res) => {
     callback_requested: 'answeredHuman',
     gatekeeper_transfer: 'answeredHuman',
     wrong_contact: 'answeredHuman',
+    send_info_email: 'answeredHuman',
     machine: 'answeredMachine',
     machine_voicemail: 'answeredMachine',
     no_answer: 'noAnswer',
