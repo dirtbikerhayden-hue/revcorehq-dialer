@@ -1569,6 +1569,7 @@ app.post('/login', express.json(), (req, res) => {
   req.session.agentName = normalizedUsername;
   const assignedCampaignId = user.campaignId || null;
   req.session.assignedCampaignId = assignedCampaignId;
+  req.session.allowAfterHours = !!user.allowAfterHours;
 
   console.log('Agent logged in:', normalizedUsername);
 
@@ -1576,6 +1577,7 @@ app.post('/login', express.json(), (req, res) => {
     success: true,
     agentId: normalizedUsername,
     agentName: normalizedUsername,
+    allowAfterHours: !!user.allowAfterHours,
     campaignId: assignedCampaignId,
     campaignName: assignedCampaignId ? (campaigns[assignedCampaignId]?.name || assignedCampaignId) : null
   });
@@ -1587,10 +1589,13 @@ app.get('/me', (req, res) => {
     return res.json({ loggedIn: false });
   }
 
+  const user = users[req.session.agentId] || {};
+
   return res.json({
     loggedIn: true,
     agentId: req.session.agentId,
     agentName: req.session.agentName,
+    allowAfterHours: !!user.allowAfterHours,
     campaignId: req.session.assignedCampaignId || null,
     campaignName: req.session.assignedCampaignId
       ? (campaigns[req.session.assignedCampaignId]?.name || req.session.assignedCampaignId)
@@ -2565,12 +2570,6 @@ app.all('/twilio/voice', (req, res) => {
 
     const machineDetectionOn = appSettings.machineDetectionEnabled;
     const callRecordingOn = appSettings.callRecordingEnabled;
-
-    // Keep the lock tag set during live call (if we have contact meta)
-    const meta = agentId ? activeLeadMetaByAgent[agentId] : null;
-    if (answeredBy && meta && meta.ghlContactId) {
-      ghlAddTags(meta.ghlContactId, [DIALER_LOCK_TAG]).catch(() => {});
-    }
 
     if (machineDetectionOn && answeredBy === 'machine') {
       twiml.hangup();
