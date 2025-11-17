@@ -859,6 +859,15 @@
               <div class="field-note">If set, inbound calls to this number route to this agent first.</div>
             </div>
           </div>
+          <div class="field-row">
+            <div>
+              <label for="userAfterHoursToggle">After-hours override</label>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" id="userAfterHoursToggle" />
+                <div class="field-note">Allow this user to dial outside normal business hours (testing only).</div>
+              </div>
+            </div>
+          </div>
           <div style="margin-bottom: 10px;">
             <button class="btn btn-primary" id="createUserBtn">Create User</button>
             <button class="btn btn-secondary" id="updateUserBtn">Update User</button>
@@ -1238,6 +1247,7 @@
     const userCampaignSelect = document.getElementById('userCampaignSelect');
     const userOutboundInput = document.getElementById('userOutboundInput');
     const userInboundInput = document.getElementById('userInboundInput');
+    const userAfterHoursToggle = document.getElementById('userAfterHoursToggle');
 
     const campaignCount = document.getElementById('campaignCount');
     const campaignsTableBody = document.getElementById('campaignsTableBody');
@@ -2083,9 +2093,12 @@
         const campaignLabel = campaignId ? (campaignMap[campaignId]?.name || campaignId) : '—';
         const outbound = info.outboundNumber || '—';
         const inbound = info.inboundNumber || '—';
+        const afterHoursBadge = info.allowAfterHours === true
+          ? '<span class="badge-soft" style="margin-left:4px;font-size:10px;padding:2px 6px;">After-hours</span>'
+          : '';
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${username}</td>
+          <td>${username}${afterHoursBadge}</td>
           <td>${info.role || 'agent'}</td>
           <td>${statusBadge(statusInfo)}</td>
           <td>${campaignLabel}</td>
@@ -2095,7 +2108,7 @@
           <td>
             <div class="actions-cell">
               <button class="btn btn-secondary btn-mini"
-                onclick="fillUserForm('${username.replace(/'/g, "\\'")}', '${(info.password || '').replace(/'/g, "\\'")}', '${(info.role || 'agent').replace(/'/g, "\\'")}', '${campaignId.replace(/'/g, "\\'")}', '${(info.outboundNumber || '').replace(/'/g, "\\'")}', '${(info.inboundNumber || '').replace(/'/g, "\\'")}')">
+                onclick="fillUserForm('${username.replace(/'/g, "\\'")}', '${(info.password || '').replace(/'/g, "\\'")}', '${(info.role || 'agent').replace(/'/g, "\\'")}', '${campaignId.replace(/'/g, "\\'")}', '${(info.outboundNumber || '').replace(/'/g, "\\'")}', '${(info.inboundNumber || '').replace(/'/g, "\\'")}', ${info.allowAfterHours === true ? 'true' : 'false'})">
                 Edit
               </button>
               <button class="btn btn-danger btn-mini"
@@ -2110,7 +2123,7 @@
     }
 
     // expose for onclick
-    window.fillUserForm = (username, password, role, campaignId, outboundNumber, inboundNumber) => {
+    window.fillUserForm = (username, password, role, campaignId, outboundNumber, inboundNumber, allowAfterHours) => {
       usernameInput.value = username;
       newUsernameInput.value = "";
       passwordInput.value = password;
@@ -2120,6 +2133,9 @@
       }
       if (userOutboundInput) userOutboundInput.value = outboundNumber || '';
       if (userInboundInput) userInboundInput.value = inboundNumber || '';
+       if (userAfterHoursToggle) {
+         userAfterHoursToggle.checked = allowAfterHours === true || allowAfterHours === 'true';
+       }
       setStatus(userStatus, "");
     };
 
@@ -2209,6 +2225,7 @@
       const campaignId = userCampaignSelect ? userCampaignSelect.value : '';
       const outboundNumber = userOutboundInput ? userOutboundInput.value.trim() : '';
       const inboundNumber = userInboundInput ? userInboundInput.value.trim() : '';
+      const allowAfterHours = userAfterHoursToggle ? userAfterHoursToggle.checked : false;
 
       if (!username || !password) {
         setStatus(userStatus, 'Username and password required.', false);
@@ -2217,7 +2234,7 @@
 
       const { ok, data } = await adminFetch('/api/admin/users', {
         method: 'POST',
-        body: JSON.stringify({ username, password, role, campaignId, outboundNumber, inboundNumber })
+        body: JSON.stringify({ username, password, role, campaignId, outboundNumber, inboundNumber, allowAfterHours })
       });
 
       if (!ok) {
@@ -2231,6 +2248,7 @@
         if (userCampaignSelect) userCampaignSelect.value = '';
         if (userOutboundInput) userOutboundInput.value = '';
         if (userInboundInput) userInboundInput.value = '';
+        if (userAfterHoursToggle) userAfterHoursToggle.checked = false;
         await loadLeaderboard();
         await loadUsers();
       }
@@ -2313,6 +2331,7 @@
       const campaignId = userCampaignSelect ? userCampaignSelect.value : '';
       const outboundNumber = userOutboundInput ? userOutboundInput.value.trim() : '';
       const inboundNumber = userInboundInput ? userInboundInput.value.trim() : '';
+      const allowAfterHours = userAfterHoursToggle ? userAfterHoursToggle.checked : false;
 
       if (newU) payload.newUsername = newU;
       if (pwd) payload.password = pwd;
@@ -2320,6 +2339,7 @@
       payload.campaignId = campaignId;
       payload.outboundNumber = outboundNumber;
       payload.inboundNumber = inboundNumber;
+      payload.allowAfterHours = allowAfterHours;
 
       const { ok, data } = await adminFetch(`/api/admin/users/${encodeURIComponent(username)}`, {
         method: 'PUT',

@@ -133,6 +133,14 @@ function saveUsers(users) {
   }
 }
 
+function hasAfterHoursOverride(agentId) {
+  const id = normalizeUsername(agentId);
+  if (!id || !users || !users[id]) {
+    return false;
+  }
+  return users[id].allowAfterHours === true;
+}
+
 let users = loadUsers();
 
 function normalizePhone(num) {
@@ -972,7 +980,15 @@ app.post('/api/admin/users', express.json(), (req, res) => {
     return res.status(401).json({ ok: false, error: 'Unauthorized' });
   }
 
-  const { username, password, role, campaignId, outboundNumber, inboundNumber } = req.body || {};
+  const {
+    username,
+    password,
+    role,
+    campaignId,
+    outboundNumber,
+    inboundNumber,
+    allowAfterHours
+  } = req.body || {};
   const normalizedUsername = normalizeUsername(username);
   const normalizedCampaignId = campaignId ? String(campaignId) : null;
   const normalizedOutbound = outboundNumber ? normalizePhone(outboundNumber) : '';
@@ -999,7 +1015,8 @@ app.post('/api/admin/users', express.json(), (req, res) => {
     role: role || 'agent',
     campaignId: normalizedCampaignId,
     outboundNumber: normalizedOutbound,
-    inboundNumber: normalizedInbound
+    inboundNumber: normalizedInbound,
+    allowAfterHours: !!allowAfterHours
   };
 
   saveUsers(users);
@@ -1014,7 +1031,15 @@ app.put('/api/admin/users/:username', express.json(), (req, res) => {
   }
 
   const oldUsername = normalizeUsername(req.params.username);
-  const { newUsername, password, role, campaignId, outboundNumber, inboundNumber } = req.body || {};
+  const {
+    newUsername,
+    password,
+    role,
+    campaignId,
+    outboundNumber,
+    inboundNumber,
+    allowAfterHours
+  } = req.body || {};
   const normalizedCampaignId = typeof campaignId === 'undefined' || campaignId === ''
     ? undefined
     : String(campaignId);
@@ -1055,7 +1080,11 @@ app.put('/api/admin/users/:username', express.json(), (req, res) => {
     inboundNumber:
       typeof normalizedInbound !== 'undefined'
         ? normalizedInbound
-        : current.inboundNumber || ''
+        : current.inboundNumber || '',
+    allowAfterHours:
+      typeof allowAfterHours !== 'undefined'
+        ? !!allowAfterHours
+        : !!current.allowAfterHours
   };
 
   if (nextUsername && nextUsername !== oldUsername) {
@@ -1378,7 +1407,8 @@ app.post('/api/manual-dial', express.json(), async (req, res) => {
   const easternNow = getEasternNow();
   const reportDateId = getDateId(easternNow);
 
-  if (!isWithinBusinessHours(easternNow)) {
+  const bypassHours = hasAfterHoursOverride(agentId);
+  if (!bypassHours && !isWithinBusinessHours(easternNow)) {
     return res.status(403).json({
       ok: false,
       error: 'Manual dialing is only allowed between 9:00AM and 8:00PM EST, Monday–Saturday.'
@@ -2418,7 +2448,8 @@ app.post('/api/dialer/next', async (req, res) => {
   const easternNow = ensureLeaderboardWeek();
   const reportDateId = getDateId(easternNow);
 
-  if (!isWithinBusinessHours(easternNow)) {
+  const bypassHours = hasAfterHoursOverride(agentId);
+  if (!bypassHours && !isWithinBusinessHours(easternNow)) {
     return res.status(403).json({
       success: false,
       error: 'Outbound dialing is only allowed between 9:00AM and 8:00PM EST, Monday–Saturday.'
