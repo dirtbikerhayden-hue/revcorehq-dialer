@@ -2486,16 +2486,17 @@
           bumpCallState('Agent ringing');
 
           const from = call.parameters?.From || 'Unknown';
-          if (incomingMetaEl) incomingMetaEl.textContent = `From: ${from}`;
-          showIncomingModal();
-
-          // Auto-accept incoming leg while a dialing session is running
-          try {
-            if (sessionState === 'running') {
+          if (sessionState === 'running') {
+            // Outbound campaign leg – auto-accept without requiring user click
+            try {
               call.accept();
+            } catch (e) {
+              console.warn('[Dialer] Auto-accept failed:', e);
             }
-          } catch (e) {
-            console.warn('[Dialer] Auto-accept failed:', e);
+          } else {
+            // Inbound or manual scenarios – show modal so agent can choose
+            if (incomingMetaEl) incomingMetaEl.textContent = `From: ${from}`;
+            showIncomingModal();
           }
 
           call.on('accept', () => {
