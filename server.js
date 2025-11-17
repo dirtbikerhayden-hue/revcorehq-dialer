@@ -224,13 +224,16 @@ function ensureCampaignStats(campaignId) {
     campaignStats[campaignId] = {
       totals: {},
       byAgent: {},
+      byContact: {},
       lastUpdated: null
     };
+  } else if (!campaignStats[campaignId].byContact) {
+    campaignStats[campaignId].byContact = {};
   }
   return campaignStats[campaignId];
 }
 
-function recordCampaignDisposition(campaignId, agentId, outcome) {
+function recordCampaignDisposition(campaignId, agentId, outcome, contactId) {
   if (!campaignId) return;
   const stats = ensureCampaignStats(campaignId);
   stats.totals[outcome] = (stats.totals[outcome] || 0) + 1;
@@ -241,6 +244,31 @@ function recordCampaignDisposition(campaignId, agentId, outcome) {
   agentStats[outcome] = (agentStats[outcome] || 0) + 1;
   agentStats.total = (agentStats.total || 0) + 1;
 
+  // track per-contact attempts for non-pickup outcomes
+  if (contactId) {
+    const key = String(contactId);
+    if (!stats.byContact[key]) {
+      stats.byContact[key] = {
+        attempts: 0,
+        lastOutcome: null,
+        lastAttemptMs: null
+      };
+    }
+    const contactStats = stats.byContact[key];
+    if (NON_PICKUP_OUTCOMES.includes(outcome)) {
+      contactStats.attempts = (contactStats.attempts || 0) + 1;
+      contactStats.lastAttemptMs = Date.now();
+      contactStats.lastOutcome = outcome;
+
+      if (contactStats.attempts >= MAX_NON_PICKUP_ATTEMPTS) {
+        // mark in GHL so future fetches also skip by tag
+        ghlAddTags(contactId, [NON_PICKUP_REMOVED_TAG]).catch(() => {});
+      }
+    } else {
+      contactStats.lastOutcome = outcome;
+    }
+  }
+
   stats.lastUpdated = new Date().toISOString();
   saveCampaignStats();
 }
@@ -250,11 +278,22 @@ let campaignStats = loadCampaignStats();
 let localLeadStore = loadLocalLeadStore();
 const recentDialMap = {};
 const contactLocks = {}; // in-memory lock so a contact isn't dialed twice concurrently
+const NON_PICKUP_OUTCOMES = [
+  'no_answer',
+  'busy',
+  'failed',
+  'machine',
+  'machine_voicemail'
+];
+const MAX_NON_PICKUP_ATTEMPTS = 3;
+const NON_PICKUP_REMOVED_TAG = 'removed 3 attempts made';
+const NON_PICKUP_COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours
 const DISPOSITION_SKIP_TAGS = [
   'bad_number',
   'not_interested',
   'wrong_contact',
-  'booked'
+  'booked',
+  NON_PICKUP_REMOVED_TAG
 ];
 const lastAgentByNumber = {}; // track last agent who called a number
 const OUTCOME_LABELS = {
@@ -508,17 +547,20 @@ app.post('/api/admin/users', express.json(), (req, res) => {
     return res.status(401).json({ ok: false, error: 'Unauthorized' });
   }
 
-  const { username, password, role, campaignId, dialSlot } = req.body || {};
+  const { username, password, role, campaignId, outboundNumber, inboundNumber } = req.body || {};
   const normalizedUsername = normalizeUsername(username);
   const normalizedCampaignId = campaignId ? String(campaignId) : null;
-  let normalizedDialSlot = dialSlot === '' || typeof dialSlot === 'undefined'
-    ? null
-    : String(dialSlot);
+  const normalizedOutbound = outboundNumber ? normalizePhone(outboundNumber) : '';
+  const normalizedInbound = inboundNumber ? normalizePhone(inboundNumber) : '';
 
   if (!normalizedUsername || !password) {
     return res
       .status(400)
       .json({ ok: false, error: 'username and password are required' });
+  }
+
+  if (normalizedCampaignId && !campaigns[normalizedCampaignId]) {
+    return res.status(400).json({ ok: false, error: 'Invalid campaignId' });
   }
 
   if (users[normalizedUsername]) {
@@ -527,32 +569,12 @@ app.post('/api/admin/users', express.json(), (req, res) => {
       .json({ ok: false, error: 'User already exists' });
   }
 
-  if (normalizedCampaignId && !campaigns[normalizedCampaignId]) {
-    return res.status(400).json({ ok: false, error: 'Invalid campaignId' });
-  }
-
-  if (!normalizedDialSlot) {
-    normalizedDialSlot = normalizedUsername;
-  }
-
-  if (normalizedDialSlot && !agentSlots[normalizedDialSlot]) {
-    agentSlots[normalizedDialSlot] = normalizeSlot({
-      id: normalizedDialSlot,
-      name: normalizedDialSlot,
-      dialTarget: agentSlots[normalizedDialSlot]?.dialTarget || '',
-      inboundNumber: agentSlots[normalizedDialSlot]?.inboundNumber || ''
-    });
-    saveAgentSlots(agentSlots);
-  }
-
-  const inferredDialSlot =
-    normalizedDialSlot || (agentSlots[normalizedUsername] ? normalizedUsername : null);
-
   users[normalizedUsername] = {
     password,
     role: role || 'agent',
     campaignId: normalizedCampaignId,
-    dialSlot: inferredDialSlot
+    outboundNumber: normalizedOutbound,
+    inboundNumber: normalizedInbound
   };
 
   saveUsers(users);
@@ -567,15 +589,20 @@ app.put('/api/admin/users/:username', express.json(), (req, res) => {
   }
 
   const oldUsername = normalizeUsername(req.params.username);
-  const { newUsername, password, role, campaignId, dialSlot } = req.body || {};
+  const { newUsername, password, role, campaignId, outboundNumber, inboundNumber } = req.body || {};
   const normalizedCampaignId = typeof campaignId === 'undefined' || campaignId === ''
     ? undefined
     : String(campaignId);
-  let normalizedDialSlot = typeof dialSlot === 'undefined'
+  const normalizedOutbound = typeof outboundNumber === 'undefined'
     ? undefined
-    : dialSlot === ''
-      ? null
-      : String(dialSlot);
+    : outboundNumber === ''
+      ? ''
+      : normalizePhone(outboundNumber);
+  const normalizedInbound = typeof inboundNumber === 'undefined'
+    ? undefined
+    : inboundNumber === ''
+      ? ''
+      : normalizePhone(inboundNumber);
 
   if (!users[oldUsername]) {
     return res.status(404).json({ ok: false, error: 'User not found' });
@@ -587,40 +614,24 @@ app.put('/api/admin/users/:username', express.json(), (req, res) => {
     return res.status(400).json({ ok: false, error: 'Invalid campaignId' });
   }
 
-  if (normalizedDialSlot && !agentSlots[normalizedDialSlot]) {
-    return res.status(400).json({ ok: false, error: 'Invalid dial slot' });
-  }
-
-  if (typeof normalizedDialSlot === 'undefined' || normalizedDialSlot === null) {
-    normalizedDialSlot = oldUsername;
-  }
-
-  if (normalizedDialSlot && !agentSlots[normalizedDialSlot]) {
-    agentSlots[normalizedDialSlot] = normalizeSlot({
-      id: normalizedDialSlot,
-      name: normalizedDialSlot,
-      dialTarget: agentSlots[normalizedDialSlot]?.dialTarget || '',
-      inboundNumber: agentSlots[normalizedDialSlot]?.inboundNumber || ''
-    });
-    saveAgentSlots(agentSlots);
-  }
+  const current = users[oldUsername];
 
   const updatedUser = {
-    password: password || users[oldUsername].password,
-    role: role || users[oldUsername].role || 'agent',
+    password: password || current.password,
+    role: role || current.role || 'agent',
     campaignId:
       typeof normalizedCampaignId !== 'undefined'
         ? normalizedCampaignId || null
-        : users[oldUsername].campaignId || null,
-    dialSlot:
-      typeof normalizedDialSlot !== 'undefined'
-        ? normalizedDialSlot
-        : users[oldUsername].dialSlot || null
+        : current.campaignId || null,
+    outboundNumber:
+      typeof normalizedOutbound !== 'undefined'
+        ? normalizedOutbound
+        : current.outboundNumber || '',
+    inboundNumber:
+      typeof normalizedInbound !== 'undefined'
+        ? normalizedInbound
+        : current.inboundNumber || ''
   };
-
-  if (!updatedUser.dialSlot && agentSlots[oldUsername]) {
-    updatedUser.dialSlot = oldUsername;
-  }
 
   if (nextUsername && nextUsername !== oldUsername) {
     if (users[nextUsername]) {
@@ -953,7 +964,7 @@ app.post('/api/manual-dial', express.json(), async (req, res) => {
     getDialNumberForAgent(agentId) ||
     chooseLocalNumberForLead(toNumber) ||
     defaultCallerId;
-  console.log('[Manual outbound]', { agentId, fromNumber, slotId: getUserDialConfig(agentId)?.slotId, toNumber });
+  console.log('[Manual outbound]', { agentId, fromNumber, toNumber });
   if (!fromNumber) {
     return res.status(400).json({ ok: false, error: 'No caller ID available' });
   }
@@ -1270,77 +1281,64 @@ function getNextLocalLead(campaignId) {
   return queue.shift();
 }
 
-function getAgentSlot(slotId) {
-  if (!slotId) return null;
-  return agentSlots[slotId] || null;
-}
-
-function getUserDialConfig(agentId) {
-  const normalizedId = normalizeUsername(agentId);
-  if (!normalizedId) return null;
-  const user = users[normalizedId];
-  let slotId = null;
-  if (user && user.dialSlot && getAgentSlot(String(user.dialSlot))) {
-    slotId = String(user.dialSlot);
-  } else if (getAgentSlot(normalizedId)) {
-    slotId = normalizedId;
-  } else {
-    slotId = user && user.dialSlot ? String(user.dialSlot) : String(normalizedId);
-  }
-  const slot = getAgentSlot(slotId);
-  return {
-    slotId,
-    dialTarget: user && user.dialTarget ? user.dialTarget : slot ? slot.dialTarget : null,
-    name: slot ? slot.name : (user?.displayName || normalizedId)
-  };
-}
-
 function getAvailableAgents(agentIds = []) {
   return (agentIds || [])
     .map(normalizeUsername)
     .filter(Boolean)
-    .filter(id => !activeCallByAgent[id] && (users[id] || agentSlots[id]));
+    .filter(id => !activeCallByAgent[id] && users[id]);
 }
 
 function getDialNumberForAgent(agentId) {
-  const cfg = getUserDialConfig(agentId);
-  return cfg && cfg.dialTarget ? cfg.dialTarget : null;
+  const normalizedId = normalizeUsername(agentId);
+  if (!normalizedId) return null;
+  const user = users[normalizedId];
+  if (!user || !user.outboundNumber) return null;
+  const normalized = normalizePhone(user.outboundNumber);
+  return normalized || null;
 }
 
 function selectInboundTargets(fromNumber, toNumber) {
   const preferredAgent = normalizeUsername(lastAgentByNumber[fromNumber]);
   const allAgents = Object.keys(users || {}).map(normalizeUsername).filter(Boolean);
-  let targets = [];
-
   const normalizedTo = normalizePhone(toNumber);
+
+  // If an inboundNumber is configured for a user matching the dialed number,
+  // route to that user first (if available and not on a call).
   if (normalizedTo) {
-    const matchedSlots = Object.values(agentSlots || {})
-      .filter(slot => slot.inboundNumber === normalizedTo)
-      .map(slot => slot.id);
-    const matchAvailable = getAvailableAgents(matchedSlots);
+    const matchedAgents = Object.entries(users || {})
+      .filter(([id, info]) => normalizePhone(info.inboundNumber) === normalizedTo)
+      .map(([id]) => id);
+    const matchAvailable = getAvailableAgents(matchedAgents).filter(id => {
+      const status = getAgentStatus(id);
+      return status === 'online' || status === 'away';
+    });
     if (matchAvailable.length) {
-      targets = matchAvailable;
+      return matchAvailable;
     }
   }
 
-  const priorityTargets = getAvailableAgents(PRIORITY_INBOUND_AGENTS);
-  if (priorityTargets.length) {
-    targets = priorityTargets;
+  // Otherwise, get all agents who are free and at least away/online.
+  const available = getAvailableAgents(allAgents).filter(id => {
+    const status = getAgentStatus(id);
+    return status === 'online' || status === 'away';
+  });
+
+  if (!available.length) return [];
+
+  const statusOrder = { online: 0, away: 1 };
+  available.sort((a, b) => {
+    const sa = getAgentStatus(a);
+    const sb = getAgentStatus(b);
+    return (statusOrder[sa] ?? 2) - (statusOrder[sb] ?? 2);
+  });
+
+  // If the last agent who spoke with this caller is available, prefer them.
+  if (preferredAgent && available.includes(preferredAgent)) {
+    return [preferredAgent];
   }
 
-  if (!targets.length && preferredAgent) {
-    const preferredAvailable = getAvailableAgents([preferredAgent]);
-    if (preferredAvailable.length) {
-      targets = preferredAvailable;
-    }
-  }
-
-  if (!targets.length) {
-    const available = getAvailableAgents(allAgents).filter(id => !targets.includes(id));
-    targets = available.slice(0, 2);
-  }
-
-  return targets;
+  // Otherwise, return the top 1–2 best candidates.
+  return available.slice(0, 2);
 }
 
 function buildInboundDial(twiml, targets, toNumber) {
@@ -1542,6 +1540,8 @@ async function fetchGhlLeadForCampaign(campaign) {
   if (!isGhlCampaign(campaign)) return null;
   try {
     const campaignId = campaign.id || campaign.campaignId || null;
+    const stats = ensureCampaignStats(campaignId);
+    const byContact = stats.byContact || {};
     const params = {
       location_id: GHL_LOCATION_ID,
       pipeline_id: campaign.ghlPipelineId,
@@ -1558,6 +1558,21 @@ async function fetchGhlLeadForCampaign(campaign) {
         (contactId ? await ghlFetchContact(contactId) : null);
       if (!contact) continue;
       if (isContactLocked(contactId)) continue;
+
+      const contactKey = String(contactId || contact.id);
+      const contactStats = byContact[contactKey];
+      if (contactStats && NON_PICKUP_OUTCOMES.includes(contactStats.lastOutcome || '')) {
+        const now = Date.now();
+        if (contactStats.lastAttemptMs && (now - contactStats.lastAttemptMs) < NON_PICKUP_COOLDOWN_MS) {
+          // within 4-hour cooldown window since last non-pickup attempt
+          continue;
+        }
+        if ((contactStats.attempts || 0) >= MAX_NON_PICKUP_ATTEMPTS) {
+          // extra guard: if attempts >= 3, skip entirely
+          continue;
+        }
+      }
+
       const tags = normalizeTagList(contact.tags);
       if (!tags.includes(campaign.ghlTag)) continue;
       // Skip if contact already has a final disposition we don't want to redial
@@ -1803,7 +1818,8 @@ function ensureAgentMetrics(agentId) {
       totalTalkTimeSec: 0,
       lastCallDurationSec: 0,
       avgCallDurationSec: 0,
-      completedCallCount: 0
+      completedCallCount: 0,
+      currentCallStartMs: null
     };
   }
   return metricsByAgent[agentId];
@@ -1815,6 +1831,7 @@ function markAgentActivity(agentId) {
 }
 
 function getAgentStatus(agentId) {
+  if (activeCallByAgent[agentId]) return 'on_call';
   const m = ensureAgentMetrics(agentId);
   if (!m.lastActivityMs) return 'offline';
 
@@ -1853,9 +1870,12 @@ app.get('/api/metrics/:agentId', (req, res) => {
   const { agentId } = req.params;
   const metrics = ensureAgentMetrics(agentId);
   const status = getAgentStatus(agentId);
-  const statusDurationSec = metrics.lastActivityMs
-    ? Math.floor((Date.now() - metrics.lastActivityMs) / 1000)
-    : null;
+  let statusDurationSec = null;
+  if (status === 'on_call' && metrics.currentCallStartMs) {
+    statusDurationSec = Math.floor((Date.now() - metrics.currentCallStartMs) / 1000);
+  } else if (metrics.lastActivityMs) {
+    statusDurationSec = Math.floor((Date.now() - metrics.lastActivityMs) / 1000);
+  }
   res.json({
     agentId,
     metrics: {
@@ -1870,9 +1890,12 @@ app.get('/api/metrics/:agentId', (req, res) => {
 app.get('/api/leaderboard', (req, res) => {
   const rows = Object.entries(metricsByAgent).map(([agentId, m]) => {
     const status = getAgentStatus(agentId);
-    const statusDurationSec = m.lastActivityMs
-      ? Math.floor((Date.now() - m.lastActivityMs) / 1000)
-      : null;
+    let statusDurationSec = null;
+    if (status === 'on_call' && m.currentCallStartMs) {
+      statusDurationSec = Math.floor((Date.now() - m.currentCallStartMs) / 1000);
+    } else if (m.lastActivityMs) {
+      statusDurationSec = Math.floor((Date.now() - m.lastActivityMs) / 1000);
+    }
     return {
       agentId,
       totalCalls: m.totalCalls || 0,
@@ -1964,11 +1987,6 @@ app.post('/api/dialer/next', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Invalid campaign' });
   }
 
-  const dialConfig = getUserDialConfig(agentId);
-  if (!dialConfig) {
-    return res.status(400).json({ success: false, error: 'No dial target configured for this agent.' });
-  }
-
   let lead = null;
   if (isGhlCampaign(campaign)) {
     lead = await fetchGhlLeadForCampaign(campaign);
@@ -1980,10 +1998,13 @@ app.post('/api/dialer/next', async (req, res) => {
     return res.json({ success: false, error: 'No leads in queue for this campaign' });
   }
   const fromNumber =
-    dialConfig.dialTarget ||
+    getDialNumberForAgent(agentId) ||
     chooseLocalNumberForLead(lead.phone) ||
     defaultCallerId;
-  console.log('[Dialer outbound]', { agentId, fromNumber, slotId: dialConfig.slotId, leadPhone: lead.phone });
+  if (!fromNumber) {
+    return res.status(400).json({ success: false, error: 'No caller ID available' });
+  }
+  console.log('[Dialer outbound]', { agentId, fromNumber, leadPhone: lead.phone });
 
   try {
     const call = await client.calls.create({
@@ -2139,6 +2160,12 @@ app.all('/twilio/status', (req, res) => {
   const { agentId } = callInfo;
   const m = ensureAgentMetrics(agentId);
 
+  if (CallStatus === 'in-progress' || CallStatus === 'answered') {
+    if (!m.currentCallStartMs) {
+      m.currentCallStartMs = Date.now();
+    }
+  }
+
   if (CallStatus === 'completed') {
     if (AnsweredBy === 'human') m.answeredHuman += 1;
     if (AnsweredBy === 'machine') m.answeredMachine += 1;
@@ -2151,6 +2178,7 @@ app.all('/twilio/status', (req, res) => {
         m.avgCallDurationSec = Math.round(m.totalTalkTimeSec / m.completedCallCount);
       }
     }
+    m.currentCallStartMs = null;
   } else if (CallStatus === 'no-answer') {
     m.noAnswer += 1;
   } else if (CallStatus === 'busy') {
@@ -2219,11 +2247,11 @@ app.post('/api/disposition', async (req, res) => {
   m.lastOutcome = safeOutcome;
   m.lastLeadName = leadName || null;
   m.lastTimestamp = new Date().toISOString();
-
-  recordCampaignDisposition(campaignId, agentId, safeOutcome);
-
-  const dialInfo = getUserDialConfig(agentId);
   const meta = activeLeadMetaByAgent[agentId];
+  const contactIdForStats = meta?.ghlContactId || null;
+
+  recordCampaignDisposition(campaignId, agentId, safeOutcome, contactIdForStats);
+
   const activeCallSid = activeCallByAgent[agentId] || null;
   const isAutosyncConnect = safeOutcome === 'connected';
   if (meta) {
@@ -2320,13 +2348,13 @@ app.get('/health', (req, res) => {
 app.get('/metrics-admin', (req, res) => {
   let rows = '';
 
-  Object.values(agentSlots).forEach(agent => {
-    const stats = ensureAgentMetrics(agent.id);
+  Object.keys(users || {}).forEach(agentId => {
+    const stats = ensureAgentMetrics(agentId);
 
     rows += `
       <tr>
-        <td>${agent.id}</td>
-        <td>${agent.name}</td>
+        <td>${agentId}</td>
+        <td>${agentId}</td>
         <td>${stats.totalCalls || 0}</td>
         <td>${stats.answeredHuman || 0}</td>
         <td>${stats.conversions || 0}</td>

@@ -701,7 +701,7 @@
             <div class="metric-label">Agents Online</div>
             <div class="metric-value">
               <span id="metricOnlineAgents">0</span>
-              <span class="metric-pill" id="metricTotalAgents">0 total slots</span>
+              <span class="metric-pill" id="metricTotalAgents">0 agents</span>
             </div>
             <div class="metric-status-line">
               <span id="metricOfflineAgents">0 offline</span>
@@ -802,10 +802,16 @@
               </select>
             </div>
             <div>
-              <label for="userDialSlotSelect">Dial Slot</label>
-              <select id="userDialSlotSelect">
-                <option value="">Select slot…</option>
-              </select>
+              <label for="userOutboundInput">Outbound Number</label>
+              <input id="userOutboundInput" placeholder="+15551234567" />
+              <div class="field-note">Number we dial to reach the agent.</div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div>
+              <label for="userInboundInput">Inbound Number (optional)</label>
+              <input id="userInboundInput" placeholder="+15557654321" />
+              <div class="field-note">If set, inbound calls to this number route to this agent first.</div>
             </div>
           </div>
           <div style="margin-bottom: 10px;">
@@ -822,7 +828,8 @@
               <th>Role</th>
               <th>Status</th>
               <th>Campaign</th>
-              <th>Dial Slot</th>
+              <th>Outbound #</th>
+              <th>Inbound #</th>
               <th>Password</th>
               <th style="width:1%;">Actions</th>
             </tr>
@@ -839,102 +846,47 @@
 
       <!-- CAMPAIGNS + LEADERBOARD -->
       <div class="right-column-grid">
-        <!-- PHONE NUMBERS -->
+        <!-- LOCAL PRESENCE -->
         <div class="card" style="margin-bottom: 16px;">
           <div class="card-header">
             <div>
-              <div class="card-title">Phone Numbers & Slots</div>
+              <div class="card-title">Local Presence Numbers</div>
               <div class="card-subtitle">
-                Manage agent dial targets, inbound numbers, and local presence pools.
+                Map area codes to outbound numbers for presence.
               </div>
-            </div>
-            <div class="badge-soft">
-              Slots: <span id="slotCount">0</span>
             </div>
           </div>
-          <div id="slotFormArea" class="hidden">
-            <div class="field-row">
-              <div>
-                <label for="slotIdInput">Slot ID</label>
-                <input id="slotIdInput" placeholder="e.g. outbound1" />
-              </div>
-              <div>
-                <label for="slotNameInput">Display Name</label>
-                <input id="slotNameInput" placeholder="Slot label (e.g. John’s line)" />
-              </div>
+          <div class="field-row">
+            <div>
+              <label for="lpAreaInput">Area Code</label>
+              <input id="lpAreaInput" placeholder="e.g. 480" />
             </div>
-            <div class="field-row">
-              <div>
-                <label for="slotDialInput">Dial Target (agent phone)</label>
-                <input id="slotDialInput" placeholder="+15551234567" />
-                <div class="field-note">Number we dial to reach the agent.</div>
-              </div>
-              <div>
-                <label for="slotInboundInput">Inbound Number (optional)</label>
-                <input id="slotInboundInput" placeholder="+15557654321" />
-                <div class="field-note">If set, inbound calls to this number route to this agent first.</div>
-              </div>
+            <div>
+              <label for="lpNumberInput">Number</label>
+              <input id="lpNumberInput" placeholder="+14801234567" />
             </div>
-            <div style="margin-bottom: 10px;">
-              <button class="btn btn-primary" id="saveSlotBtn">Save Slot</button>
-              <button class="btn btn-secondary" id="resetSlotBtn">Clear</button>
-              <button class="btn btn-danger" id="deleteSlotBtn">Delete Slot</button>
-            </div>
-            <div id="slotStatus" class="status-text"></div>
           </div>
-          <table>
+          <div style="margin-bottom: 8px;">
+            <button class="btn btn-primary" id="addLpBtn">Add / Update Area Code</button>
+            <button class="btn btn-secondary" id="clearLpBtn">Clear Inputs</button>
+          </div>
+          <div id="lpStatus" class="status-text"></div>
+          <table style="margin-top:8px;">
             <thead>
               <tr>
-                <th>Username</th>
-                <th>Outbound #</th>
-                <th>Inbound #</th>
+                <th>Area</th>
+                <th>Number</th>
                 <th style="width:1%;">Actions</th>
               </tr>
             </thead>
-            <tbody id="slotTableBody">
+            <tbody id="lpTableBody">
               <tr>
-                <td colspan="4" style="padding:10px 8px; color:var(--text-soft);">
-                  Unlock admin to view and manage inbound/outbound numbers.
+                <td colspan="3" style="padding:10px 8px; color:var(--text-soft);">
+                  Unlock admin to view and manage local presence.
                 </td>
               </tr>
             </tbody>
           </table>
-
-          <div style="margin-top: 14px; border-top: 1px dashed rgba(148,163,184,0.25); padding-top: 12px;">
-            <div class="card-title" style="font-size:0.9rem;">Local Presence Numbers</div>
-            <div class="card-subtitle">Map area codes to outbound numbers for presence.</div>
-            <div class="field-row">
-              <div>
-                <label for="lpAreaInput">Area Code</label>
-                <input id="lpAreaInput" placeholder="e.g. 480" />
-              </div>
-              <div>
-                <label for="lpNumberInput">Number</label>
-                <input id="lpNumberInput" placeholder="+14801234567" />
-              </div>
-            </div>
-            <div style="margin-bottom: 8px;">
-              <button class="btn btn-primary" id="addLpBtn">Add / Update Area Code</button>
-              <button class="btn btn-secondary" id="clearLpBtn">Clear Inputs</button>
-            </div>
-            <div id="lpStatus" class="status-text"></div>
-            <table style="margin-top:8px;">
-              <thead>
-                <tr>
-                  <th>Area</th>
-                  <th>Number</th>
-                  <th style="width:1%;">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="lpTableBody">
-                <tr>
-                  <td colspan="3" style="padding:10px 8px; color:var(--text-soft);">
-                    Unlock admin to view and manage local presence.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
         </div>
 
         <!-- CAMPAIGNS -->
@@ -1202,7 +1154,6 @@
     let adminKey = "";
     let statusByAgent = {};
     let campaignMap = {};
-    let agentSlotMap = {};
     let userMap = {};
     let localPresenceMap = {};
     let ghlPipelines = [];
@@ -1240,7 +1191,8 @@
     const newUsernameInput = document.getElementById('newUsernameInput');
     const roleSelect = document.getElementById('roleSelect');
     const userCampaignSelect = document.getElementById('userCampaignSelect');
-    const userDialSlotSelect = document.getElementById('userDialSlotSelect');
+    const userOutboundInput = document.getElementById('userOutboundInput');
+    const userInboundInput = document.getElementById('userInboundInput');
 
     const campaignCount = document.getElementById('campaignCount');
     const campaignsTableBody = document.getElementById('campaignsTableBody');
@@ -1271,17 +1223,6 @@
     const recordingToggle = document.getElementById('toggleCallRecording');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
     const settingsStatus = document.getElementById('settingsStatus');
-    const slotFormArea = document.getElementById('slotFormArea');
-    const slotCount = document.getElementById('slotCount');
-    const slotTableBody = document.getElementById('slotTableBody');
-    const slotIdInput = document.getElementById('slotIdInput');
-    const slotNameInput = document.getElementById('slotNameInput');
-    const slotDialInput = document.getElementById('slotDialInput');
-    const slotInboundInput = document.getElementById('slotInboundInput');
-    const slotStatus = document.getElementById('slotStatus');
-    const saveSlotBtn = document.getElementById('saveSlotBtn');
-    const deleteSlotBtn = document.getElementById('deleteSlotBtn');
-    const resetSlotBtn = document.getElementById('resetSlotBtn');
     const lpAreaInput = document.getElementById('lpAreaInput');
     const lpNumberInput = document.getElementById('lpNumberInput');
     const lpStatus = document.getElementById('lpStatus');
@@ -1360,6 +1301,9 @@
       if (s === 'online' || s === 'active') {
         cls = 'status-badge status-active';
         label = 'Online';
+      } else if (s === 'on_call') {
+        cls = 'status-badge status-active';
+        label = `On Call · ${durationText}`;
       } else if (s === 'away' || s === 'idle') {
         cls = 'status-badge status-idle';
         label = `Away · ${durationText}`;
@@ -1769,81 +1713,6 @@
       }
     }
 
-    async function loadAgentSlots() {
-      if (!adminKey) return;
-      const { ok, data } = await adminFetch('/api/admin/slots');
-      if (!ok) {
-        setStatus(campaignStatus, data.error || 'Failed to load dial slots.', false);
-        return;
-      }
-      agentSlotMap = data.slots || {};
-      renderDialSlotOptions();
-      renderSlotTable();
-      updateSlotCount();
-    }
-
-    function renderDialSlotOptions() {
-      if (!userDialSlotSelect) return;
-      const current = userDialSlotSelect.value;
-      userDialSlotSelect.innerHTML = '<option value="">Select slot…</option>';
-      Object.values(agentSlotMap).forEach(slot => {
-        const opt = document.createElement('option');
-        opt.value = slot.id;
-        opt.textContent = slot.name;
-        if (slot.id === current) opt.selected = true;
-        userDialSlotSelect.appendChild(opt);
-      });
-    }
-
-    function getDialSlotLabel(slotId) {
-      if (!slotId) return '—';
-      return (agentSlotMap[slotId] && agentSlotMap[slotId].name) || slotId;
-    }
-
-    function updateSlotCount() {
-      const count = Object.keys(userMap || {}).length || Object.keys(agentSlotMap || {}).length;
-      if (slotCount) slotCount.textContent = count;
-    }
-
-    function renderSlotTable() {
-      if (!slotTableBody) return;
-      const users = Object.keys(userMap || {});
-      const slots = Object.values(agentSlotMap || {});
-      const rows = users.length ? users : slots.map(s => s.id);
-      if (!rows.length) {
-        slotTableBody.innerHTML = `<tr><td colspan="4" style="padding:10px 8px; color:var(--text-soft);">No users or slots yet.</td></tr>`;
-        return;
-      }
-      slotTableBody.innerHTML = rows.map(id => {
-        const slot = agentSlotMap[id] || { id, dialTarget: '', inboundNumber: '' };
-        const outbound = slot.dialTarget || '—';
-        const inbound = slot.inboundNumber || '—';
-        return `
-          <tr>
-            <td>${id || '—'}</td>
-            <td>${outbound}</td>
-            <td>${inbound}</td>
-            <td style="white-space:nowrap;">
-              <button class="btn btn-secondary btn-small" data-slot-edit="${id}">Edit</button>
-            </td>
-          </tr>
-        `;
-      }).join('');
-      slotTableBody.querySelectorAll('[data-slot-edit]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const id = btn.getAttribute('data-slot-edit');
-          const slot = agentSlotMap[id];
-          const fallback = { id, name: id, dialTarget: '', inboundNumber: '' };
-          const s = slot || fallback;
-          slotIdInput.value = s.id || '';
-          slotNameInput.value = s.name || '';
-          slotDialInput.value = s.dialTarget || '';
-          slotInboundInput.value = s.inboundNumber || '';
-          setStatus(slotStatus, `Loaded slot ${id}.`, true);
-        });
-      });
-    }
-
     async function handleCreateCampaign() {
       if (!adminKey) {
         setStatus(campaignStatus, 'Unlock admin first.', false);
@@ -2072,7 +1941,7 @@
         });
 
         metricOnlineAgents.textContent = onlineCount;
-        metricTotalAgents.textContent = `${totalAgentsVal} total slots`;
+        metricTotalAgents.textContent = `${totalAgentsVal} agents`;
         metricOfflineAgents.textContent = `${offlineCount} offline · ${awayCount} away`;
         metricCalls.textContent = totalCalls;
         metricLive.textContent = totalLive;
@@ -2131,19 +2000,21 @@
         const statusInfo = statusByAgent[username] || { status: 'offline', duration: null };
         const campaignId = info.campaignId || '';
         const campaignLabel = campaignId ? (campaignMap[campaignId]?.name || campaignId) : '—';
-        const dialSlotLabel = getDialSlotLabel(info.dialSlot || username);
+        const outbound = info.outboundNumber || '—';
+        const inbound = info.inboundNumber || '—';
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${username}</td>
           <td>${info.role || 'agent'}</td>
           <td>${statusBadge(statusInfo)}</td>
           <td>${campaignLabel}</td>
-          <td>${dialSlotLabel}</td>
+          <td>${outbound}</td>
+          <td>${inbound}</td>
           <td>${info.password || ''}</td>
           <td>
             <div class="actions-cell">
               <button class="btn btn-secondary btn-mini"
-                onclick="fillUserForm('${username.replace(/'/g, "\\'")}', '${(info.password || '').replace(/'/g, "\\'")}', '${(info.role || 'agent').replace(/'/g, "\\'")}', '${campaignId.replace(/'/g, "\\'")}', '${(info.dialSlot || '').replace(/'/g, "\\'")}')">
+                onclick="fillUserForm('${username.replace(/'/g, "\\'")}', '${(info.password || '').replace(/'/g, "\\'")}', '${(info.role || 'agent').replace(/'/g, "\\'")}', '${campaignId.replace(/'/g, "\\'")}', '${(info.outboundNumber || '').replace(/'/g, "\\'")}', '${(info.inboundNumber || '').replace(/'/g, "\\'")}')">
                 Edit
               </button>
               <button class="btn btn-danger btn-mini"
@@ -2161,7 +2032,7 @@
     }
 
     // expose for onclick
-    window.fillUserForm = (username, password, role, campaignId, dialSlot) => {
+    window.fillUserForm = (username, password, role, campaignId, outboundNumber, inboundNumber) => {
       usernameInput.value = username;
       newUsernameInput.value = "";
       passwordInput.value = password;
@@ -2169,9 +2040,8 @@
       if (userCampaignSelect) {
         userCampaignSelect.value = campaignId || '';
       }
-      if (userDialSlotSelect) {
-        userDialSlotSelect.value = dialSlot || '';
-      }
+      if (userOutboundInput) userOutboundInput.value = outboundNumber || '';
+      if (userInboundInput) userInboundInput.value = inboundNumber || '';
       setStatus(userStatus, "");
     };
 
@@ -2228,10 +2098,6 @@
         if (campaignMetricsCard) campaignMetricsCard.classList.remove('hidden');
         if (localUploadCard) localUploadCard.classList.remove('hidden');
         if (localUploadCard) localUploadCard.classList.remove('hidden');
-        if (localUploadCard) localUploadCard.classList.remove('hidden');
-        if (slotFormArea) slotFormArea.classList.remove('hidden');
-
-        await loadAgentSlots();
         await loadGhlPipelines();
         await loadGhlTags();
         await loadCampaigns();
@@ -2263,7 +2129,8 @@
       const password = passwordInput.value.trim();
       const role = roleSelect.value || 'agent';
       const campaignId = userCampaignSelect ? userCampaignSelect.value : '';
-      const dialSlot = userDialSlotSelect ? userDialSlotSelect.value : '';
+      const outboundNumber = userOutboundInput ? userOutboundInput.value.trim() : '';
+      const inboundNumber = userInboundInput ? userInboundInput.value.trim() : '';
 
       if (!username || !password) {
         setStatus(userStatus, 'Username and password required.', false);
@@ -2272,7 +2139,7 @@
 
       const { ok, data } = await adminFetch('/api/admin/users', {
         method: 'POST',
-        body: JSON.stringify({ username, password, role, campaignId, dialSlot })
+        body: JSON.stringify({ username, password, role, campaignId, outboundNumber, inboundNumber })
       });
 
       if (!ok) {
@@ -2284,7 +2151,8 @@
         newUsernameInput.value = "";
         roleSelect.value = 'agent';
         if (userCampaignSelect) userCampaignSelect.value = '';
-        if (userDialSlotSelect) userDialSlotSelect.value = '';
+        if (userOutboundInput) userOutboundInput.value = '';
+        if (userInboundInput) userInboundInput.value = '';
         await loadLeaderboard();
         await loadUsers();
       }
@@ -2365,13 +2233,15 @@
       const pwd = passwordInput.value.trim();
       const role = roleSelect.value || 'agent';
       const campaignId = userCampaignSelect ? userCampaignSelect.value : '';
-      const dialSlot = userDialSlotSelect ? userDialSlotSelect.value : '';
+      const outboundNumber = userOutboundInput ? userOutboundInput.value.trim() : '';
+      const inboundNumber = userInboundInput ? userInboundInput.value.trim() : '';
 
       if (newU) payload.newUsername = newU;
       if (pwd) payload.password = pwd;
       if (role) payload.role = role;
       payload.campaignId = campaignId;
-      payload.dialSlot = dialSlot;
+      payload.outboundNumber = outboundNumber;
+      payload.inboundNumber = inboundNumber;
 
       const { ok, data } = await adminFetch(`/api/admin/users/${encodeURIComponent(username)}`, {
         method: 'PUT',
@@ -2387,7 +2257,8 @@
         newUsernameInput.value = "";
         roleSelect.value = 'agent';
         if (userCampaignSelect) userCampaignSelect.value = '';
-        if (userDialSlotSelect) userDialSlotSelect.value = '';
+        if (userOutboundInput) userOutboundInput.value = '';
+        if (userInboundInput) userInboundInput.value = '';
         await loadLeaderboard();
         await loadUsers();
       }
@@ -2397,74 +2268,6 @@
     adminPasswordInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') handleAdminLogin();
     });
-
-    function buildSlotPayload() {
-      return {
-        id: (slotIdInput.value || '').trim(),
-        name: (slotNameInput.value || '').trim(),
-        dialTarget: (slotDialInput.value || '').trim(),
-        inboundNumber: (slotInboundInput.value || '').trim()
-      };
-    }
-
-    async function handleSaveSlot() {
-      if (!adminKey) {
-        setStatus(slotStatus, 'Unlock admin first.', false);
-        return;
-      }
-      const payload = buildSlotPayload();
-      if (!payload.id || !payload.dialTarget) {
-        setStatus(slotStatus, 'Slot ID and dial target are required.', false);
-        return;
-      }
-      const exists = Boolean(agentSlotMap[payload.id]);
-      const url = exists ? `/api/admin/slots/${encodeURIComponent(payload.id)}` : '/api/admin/slots';
-      const method = exists ? 'PUT' : 'POST';
-      const { ok, data } = await adminFetch(url, { method, body: JSON.stringify(payload) });
-      if (!ok) {
-        setStatus(slotStatus, data.error || 'Failed to save slot.', false);
-        return;
-      }
-      agentSlotMap = data.slots || {};
-      renderDialSlotOptions();
-      renderSlotTable();
-      updateSlotCount();
-      setStatus(slotStatus, exists ? 'Slot updated.' : 'Slot created.', true);
-    }
-
-    async function handleDeleteSlot() {
-      if (!adminKey) {
-        setStatus(slotStatus, 'Unlock admin first.', false);
-        return;
-      }
-      const id = (slotIdInput.value || '').trim();
-      if (!id) {
-        setStatus(slotStatus, 'Enter a slot ID to delete.', false);
-        return;
-      }
-      const { ok, data } = await adminFetch(`/api/admin/slots/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      if (!ok) {
-        setStatus(slotStatus, data.error || 'Failed to delete slot.', false);
-        return;
-      }
-      agentSlotMap = data.slots || {};
-      renderDialSlotOptions();
-      renderSlotTable();
-      updateSlotCount();
-      slotIdInput.value = '';
-      slotNameInput.value = '';
-      slotDialInput.value = '';
-      slotInboundInput.value = '';
-      setStatus(slotStatus, 'Slot deleted.', true);
-    }
-
-    function handleResetSlotForm() {
-      slotIdInput.value = '';
-      slotNameInput.value = '';
-      slotDialInput.value = '';
-      slotInboundInput.value = '';
-      setStatus(slotStatus, 'Cleared.', true);
-    }
 
     async function handleAddLocalPresence() {
       if (!adminKey) {
@@ -2548,9 +2351,6 @@
     if (applyCampaignFiltersBtn) {
       applyCampaignFiltersBtn.addEventListener('click', loadCampaignMetrics);
     }
-    if (saveSlotBtn) saveSlotBtn.addEventListener('click', handleSaveSlot);
-    if (deleteSlotBtn) deleteSlotBtn.addEventListener('click', handleDeleteSlot);
-    if (resetSlotBtn) resetSlotBtn.addEventListener('click', handleResetSlotForm);
     if (addLpBtn) addLpBtn.addEventListener('click', handleAddLocalPresence);
     if (clearLpBtn) clearLpBtn.addEventListener('click', handleClearLocalPresenceInputs);
     if (campaignPipelineSelect) {

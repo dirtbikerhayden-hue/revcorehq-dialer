@@ -1542,6 +1542,11 @@
         agentStatusTextEl.classList.add('online');
         if (agentPillEl) agentPillEl.classList.add('status-online');
         if (agentStatusDurationEl) agentStatusDurationEl.textContent = 'Live now';
+      } else if (normalized === 'on_call') {
+        agentStatusTextEl.textContent = 'On Call';
+        agentStatusTextEl.classList.add('online');
+        if (agentPillEl) agentPillEl.classList.add('status-online');
+        if (agentStatusDurationEl) agentStatusDurationEl.textContent = `On call for ${formatRelativeDuration(durationSec)}`;
       } else if (normalized === 'away') {
         agentStatusTextEl.textContent = 'Away';
         agentStatusTextEl.classList.add('away');
