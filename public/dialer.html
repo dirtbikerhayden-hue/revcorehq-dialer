@@ -1183,6 +1183,7 @@
       </div>
         <div class="call-utility-row">
           <button id="btnMute" class="btn-ghost" disabled>Mute Mic</button>
+          <button id="btnKeypad" class="btn-ghost" disabled style="margin-left:8px;">Keypad</button>
         </div>
 
         <div class="current-lead" id="currentLeadBlock" style="opacity: 0.7;">
@@ -1444,6 +1445,7 @@
     let voiceSetupPromise = null;
     let pendingManualPhone = null;
     let pendingIncomingCall = null;
+    let keypadModal = null;
 
     function showIncomingModal() {
       if (incomingModal) {
@@ -1457,6 +1459,51 @@
       if (incomingModal) {
         incomingModal.style.display = 'none';
       }
+    }
+
+    function ensureKeypadModal() {
+      if (keypadModal) return keypadModal;
+      keypadModal = document.createElement('div');
+      keypadModal.id = 'keypadModal';
+      keypadModal.style.cssText = `
+        position: fixed; inset:0; display:none; align-items:center; justify-content:center;
+        background: rgba(0,0,0,0.65); z-index:9999;
+      `;
+      keypadModal.innerHTML = `
+        <div style="width: 260px; background: rgba(8,12,24,0.96); border:1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 16px 14px; box-shadow: 0 18px 60px rgba(0,0,0,0.55);">
+          <div style="font-size:14px; font-weight:600; margin-bottom:8px; color:#e5e7eb;">Send DTMF</div>
+          <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:8px;">
+            ${['1','2','3','4','5','6','7','8','9','*','0','#'].map(d => `
+              <button type="button" data-kp="${d}" style="padding:8px 0; border-radius:999px; border:1px solid rgba(148,163,184,0.6); background:rgba(15,23,42,0.95); color:#e5e7eb; font-size:15px;">${d}</button>
+            `).join('')}
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:4px;">
+            <button id="keypadClose" type="button" class="btn-neutral">Close</button>
+          </div>
+          <div id="keypadStatus" style="margin-top:6px; font-size:11px; color:#9ca3af;"></div>
+        </div>
+      `;
+      document.body.appendChild(keypadModal);
+      const statusEl = keypadModal.querySelector('#keypadStatus');
+      keypadModal.querySelectorAll('[data-kp]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (!activeConnection) {
+            if (statusEl) statusEl.textContent = 'No active call to send tones.';
+            return;
+          }
+          const digit = btn.getAttribute('data-kp');
+          try {
+            activeConnection.sendDigits(digit);
+            if (statusEl) statusEl.textContent = `Sent "${digit}"`;
+          } catch (e) {
+            if (statusEl) statusEl.textContent = 'Failed to send tone.';
+          }
+        });
+      });
+      keypadModal.querySelector('#keypadClose')?.addEventListener('click', () => {
+        keypadModal.style.display = 'none';
+      });
+      return keypadModal;
     }
 
     const statusTextEl        = document.getElementById('statusText');
@@ -1474,6 +1521,7 @@
     const btnEnd              = document.getElementById('btnEnd');
     const btnManual           = document.getElementById('btnManual');
     const btnMute             = document.getElementById('btnMute');
+    const btnKeypad           = document.getElementById('btnKeypad');
     const lbRankEl            = document.getElementById('lbRank');
     const lbListEl            = document.getElementById('lbList');
     const agentLabelEl        = document.getElementById('agentLabel');
@@ -2281,6 +2329,21 @@
       btnMute.addEventListener('click', () => {
         if (!activeConnection) return;
         setMuteState(!isMuted);
+      });
+    }
+
+    if (btnKeypad) {
+      btnKeypad.addEventListener('click', () => {
+        if (!activeConnection) {
+          statusTextEl.textContent = 'No active call for keypad.';
+          return;
+        }
+        const modal = ensureKeypadModal();
+        if (modal) {
+          modal.style.display = 'flex';
+          modal.style.opacity = 1;
+          modal.style.pointerEvents = 'auto';
+        }
       });
     }
 
