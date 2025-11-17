@@ -8,8 +8,15 @@ const { jwt: { AccessToken } } = twilioLib;
 const VoiceGrant = AccessToken.VoiceGrant;
 const axios = require('axios');
 const path = require('path');
-const session = require('express-session');
 const fs = require('fs');
+const session = require('express-session');
+
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+try {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+} catch (err) {
+  console.error('Error ensuring DATA_DIR exists:', err);
+}
 
 const app = express();
 
@@ -79,10 +86,10 @@ app.all('/twilio/inbound/fallback', (req, res) => {
 //   USER MANAGEMENT (users.json)
 // ===============================
 
-const USERS_FILE = path.join(__dirname, 'users.json');
-const AGENT_SLOTS_FILE = path.join(__dirname, 'agent-slots.json');
-const LOCAL_PRESENCE_FILE = path.join(__dirname, 'local-presence.json');
-const REPORT_METRICS_FILE = path.join(__dirname, 'report-metrics.json');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const AGENT_SLOTS_FILE = path.join(DATA_DIR, 'agent-slots.json');
+const LOCAL_PRESENCE_FILE = path.join(DATA_DIR, 'local-presence.json');
+const REPORT_METRICS_FILE = path.join(DATA_DIR, 'report-metrics.json');
 // High-priority inbound agents can be set later via config; default empty.
 const PRIORITY_INBOUND_AGENTS = [];
 
@@ -141,9 +148,9 @@ function normalizePhone(num) {
 //         CAMPAIGN STORE
 // ===============================
 
-const CAMPAIGNS_FILE = path.join(__dirname, 'campaigns.json');
-const CAMPAIGN_STATS_FILE = path.join(__dirname, 'campaign-stats.json');
-const LOCAL_LEADS_FILE = path.join(__dirname, 'local-leads.json');
+const CAMPAIGNS_FILE = path.join(DATA_DIR, 'campaigns.json');
+const CAMPAIGN_STATS_FILE = path.join(DATA_DIR, 'campaign-stats.json');
+const LOCAL_LEADS_FILE = path.join(DATA_DIR, 'local-leads.json');
 
 const DEFAULT_CAMPAIGNS = {
   'old-bids':       { id: 'old-bids',       name: 'Old Bids – 30–180 Days', totalLeads: 200, ghlPipelineId: '', ghlStageId: '', ghlTag: '' },
@@ -657,7 +664,7 @@ async function buildWeeklyReport() {
 //         APP SETTINGS
 // ===============================
 
-const SETTINGS_FILE = path.join(__dirname, 'settings.json');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const DEFAULT_SETTINGS = {
   machineDetectionEnabled: false,
   callRecordingEnabled: false
