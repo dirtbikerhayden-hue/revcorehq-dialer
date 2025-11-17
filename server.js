@@ -82,6 +82,7 @@ app.all('/twilio/inbound/fallback', (req, res) => {
 const USERS_FILE = path.join(__dirname, 'users.json');
 const AGENT_SLOTS_FILE = path.join(__dirname, 'agent-slots.json');
 const LOCAL_PRESENCE_FILE = path.join(__dirname, 'local-presence.json');
+const REPORT_METRICS_FILE = path.join(__dirname, 'report-metrics.json');
 // High-priority inbound agents can be set later via config; default empty.
 const PRIORITY_INBOUND_AGENTS = [];
 
@@ -276,6 +277,9 @@ function recordCampaignDisposition(campaignId, agentId, outcome, contactId) {
 let campaigns = loadCampaignMap();
 let campaignStats = loadCampaignStats();
 let localLeadStore = loadLocalLeadStore();
+const reportMetricState = loadReportMetrics();
+dailyAgentReport = reportMetricState.agents || {};
+dailyCampaignReport = reportMetricState.campaigns || {};
 const recentDialMap = {};
 const contactLocks = {}; // in-memory lock so a contact isn't dialed twice concurrently
 const NON_PICKUP_OUTCOMES = [
@@ -374,6 +378,262 @@ function ensureLeaderboardWeek() {
   }
   leaderboardWeekId = weekId;
   return easternNow;
+}
+
+// ===============================
+//     DAILY / WEEKLY REPORTING
+// ===============================
+
+const DAILY_REPORT_START_HOUR = 9;
+const DAILY_REPORT_END_HOUR = 20; // 8pm
+
+function getDateId(easternDate) {
+  const y = easternDate.getFullYear();
+  const m = String(easternDate.getMonth() + 1).padStart(2, '0');
+  const d = String(easternDate.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function isWithinDailyReportWindow(easternDate) {
+  const hour = easternDate.getHours();
+  const minute = easternDate.getMinutes();
+  if (hour < DAILY_REPORT_START_HOUR) return false;
+  if (hour > DAILY_REPORT_END_HOUR) return false;
+  if (hour === DAILY_REPORT_END_HOUR && minute > 0) return false;
+  return true;
+}
+
+function isWithinWeeklyReportWindow(easternDate) {
+  const day = easternDate.getDay(); // 0=Sun
+  if (day === 0) return false; // Sunday always out
+  if (day === 1 && !isWithinDailyReportWindow(easternDate)) return false;
+  if (day >= 2 && day <= 5) return isWithinDailyReportWindow(easternDate);
+  if (day === 6) return isWithinDailyReportWindow(easternDate); // Saturday until 8pm
+  return false;
+}
+
+let dailyAgentReport = {};
+let dailyCampaignReport = {};
+
+function loadReportMetrics() {
+  try {
+    if (!fs.existsSync(REPORT_METRICS_FILE)) {
+      return { agents: {}, campaigns: {} };
+    }
+    const raw = fs.readFileSync(REPORT_METRICS_FILE, 'utf8');
+    const parsed = JSON.parse(raw) || {};
+    return {
+      agents: parsed.agents || {},
+      campaigns: parsed.campaigns || {}
+    };
+  } catch (err) {
+    console.error('Error loading report-metrics.json:', err);
+    return { agents: {}, campaigns: {} };
+  }
+}
+
+function saveReportMetrics() {
+  try {
+    fs.writeFileSync(REPORT_METRICS_FILE, JSON.stringify({
+      agents: dailyAgentReport,
+      campaigns: dailyCampaignReport
+    }, null, 2));
+  } catch (err) {
+    console.error('Error saving report-metrics.json:', err);
+  }
+}
+
+function ensureDailyAgentMetric(dateId, agentId) {
+  if (!dailyAgentReport[dateId]) dailyAgentReport[dateId] = {};
+  if (!dailyAgentReport[dateId][agentId]) {
+    dailyAgentReport[dateId][agentId] = {
+      totalCalls: 0,
+      liveConnects: 0,
+      dispositions: {}
+    };
+  }
+  return dailyAgentReport[dateId][agentId];
+}
+
+function ensureDailyCampaignMetric(dateId, campaignId) {
+  if (!dailyCampaignReport[dateId]) dailyCampaignReport[dateId] = {};
+  if (!dailyCampaignReport[dateId][campaignId]) {
+    dailyCampaignReport[dateId][campaignId] = {
+      dispositions: {}
+    };
+  }
+  return dailyCampaignReport[dateId][campaignId];
+}
+
+async function buildDailyReport(dateId) {
+  const hoursInWindow = DAILY_REPORT_END_HOUR - DAILY_REPORT_START_HOUR;
+  const agentMetrics = dailyAgentReport[dateId] || {};
+  const agents = Object.entries(agentMetrics).map(([agentId, data]) => {
+    const totalCalls = data.totalCalls || 0;
+    const liveConnects = data.liveConnects || 0;
+    const avgCallsPerHour = hoursInWindow > 0 ? totalCalls / hoursInWindow : 0;
+    return {
+      agentId,
+      totalCalls,
+      avgCallsPerHour,
+      liveConnects,
+      dispositions: data.dispositions || {}
+    };
+  });
+
+  const totals = {
+    totalCalls: 0,
+    liveConnects: 0,
+    dispositions: {}
+  };
+  agents.forEach(a => {
+    totals.totalCalls += a.totalCalls || 0;
+    totals.liveConnects += a.liveConnects || 0;
+    Object.entries(a.dispositions || {}).forEach(([key, val]) => {
+      totals.dispositions[key] = (totals.dispositions[key] || 0) + (val || 0);
+    });
+  });
+
+  const campaignSnapshot = await buildCampaignResponse();
+  const campaignMetrics = dailyCampaignReport[dateId] || {};
+  const campaignsReport = Object.entries(campaignMetrics).map(([campaignId, data]) => {
+    const snapshot = campaignSnapshot[campaignId] || {};
+    const totalLeads =
+      typeof snapshot.computedTotalLeads === 'number'
+        ? snapshot.computedTotalLeads
+        : typeof snapshot.totalLeads === 'number'
+          ? snapshot.totalLeads
+          : 0;
+    const remainingLeads =
+      typeof snapshot.computedRemainingLeads === 'number'
+        ? snapshot.computedRemainingLeads
+        : 0;
+    return {
+      campaignId,
+      name: snapshot.name || campaignId,
+      totalLeads,
+      remainingLeads,
+      dispositions: data.dispositions || {}
+    };
+  });
+
+  return {
+    date: dateId,
+    hoursInWindow,
+    agents,
+    totals,
+    campaigns: campaignsReport
+  };
+}
+
+async function buildWeeklyReport() {
+  const easternNow = getEasternNow();
+  const base = new Date(easternNow.getTime());
+  const day = base.getDay(); // 0 Sun
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(base.getTime());
+  monday.setDate(base.getDate() + diffToMonday);
+  monday.setHours(0, 0, 0, 0);
+
+  const dateIds = [];
+  for (let i = 0; i < 6; i += 1) { // Monday–Saturday
+    const d = new Date(monday.getTime());
+    d.setDate(monday.getDate() + i);
+    dateIds.push(getDateId(d));
+  }
+
+  const weeklyAgents = {};
+  dateIds.forEach(dateId => {
+    const dayMetrics = dailyAgentReport[dateId] || {};
+    Object.entries(dayMetrics).forEach(([agentId, data]) => {
+      if (!weeklyAgents[agentId]) {
+        weeklyAgents[agentId] = {
+          totalCalls: 0,
+          liveConnects: 0,
+          dispositions: {}
+        };
+      }
+      const agg = weeklyAgents[agentId];
+      agg.totalCalls += data.totalCalls || 0;
+      agg.liveConnects += data.liveConnects || 0;
+      Object.entries(data.dispositions || {}).forEach(([key, val]) => {
+        agg.dispositions[key] = (agg.dispositions[key] || 0) + (val || 0);
+      });
+    });
+  });
+
+  const hoursInWindow = DAILY_REPORT_END_HOUR - DAILY_REPORT_START_HOUR;
+  const totalHours = hoursInWindow * dateIds.length;
+  const agents = Object.entries(weeklyAgents).map(([agentId, data]) => {
+    const totalCalls = data.totalCalls || 0;
+    const liveConnects = data.liveConnects || 0;
+    const avgCallsPerHour = totalHours > 0 ? totalCalls / totalHours : 0;
+    return {
+      agentId,
+      totalCalls,
+      avgCallsPerHour,
+      liveConnects,
+      dispositions: data.dispositions || {}
+    };
+  });
+
+  const totals = {
+    totalCalls: 0,
+    liveConnects: 0,
+    dispositions: {}
+  };
+  agents.forEach(a => {
+    totals.totalCalls += a.totalCalls || 0;
+    totals.liveConnects += a.liveConnects || 0;
+    Object.entries(a.dispositions || {}).forEach(([key, val]) => {
+      totals.dispositions[key] = (totals.dispositions[key] || 0) + (val || 0);
+    });
+  });
+
+  const campaignSnapshot = await buildCampaignResponse();
+  const weeklyCampaigns = {};
+  dateIds.forEach(dateId => {
+    const dayCampaigns = dailyCampaignReport[dateId] || {};
+    Object.entries(dayCampaigns).forEach(([campaignId, data]) => {
+      if (!weeklyCampaigns[campaignId]) {
+        weeklyCampaigns[campaignId] = { dispositions: {} };
+      }
+      const agg = weeklyCampaigns[campaignId];
+      Object.entries(data.dispositions || {}).forEach(([key, val]) => {
+        agg.dispositions[key] = (agg.dispositions[key] || 0) + (val || 0);
+      });
+    });
+  });
+
+  const campaignsReport = Object.entries(weeklyCampaigns).map(([campaignId, data]) => {
+    const snapshot = campaignSnapshot[campaignId] || {};
+    const totalLeads =
+      typeof snapshot.computedTotalLeads === 'number'
+        ? snapshot.computedTotalLeads
+        : typeof snapshot.totalLeads === 'number'
+          ? snapshot.totalLeads
+          : 0;
+    const remainingLeads =
+      typeof snapshot.computedRemainingLeads === 'number'
+        ? snapshot.computedRemainingLeads
+        : 0;
+    return {
+      campaignId,
+      name: snapshot.name || campaignId,
+      totalLeads,
+      remainingLeads,
+      dispositions: data.dispositions || {}
+    };
+  });
+
+  return {
+    weekStartDate: getDateId(monday),
+    hoursPerDay: hoursInWindow,
+    days: dateIds,
+    agents,
+    totals,
+    campaigns: campaignsReport
+  };
 }
 
 // ===============================
@@ -596,6 +856,82 @@ app.post('/api/admin/login', express.json(), (req, res) => {
   }
 
   return res.json({ ok: true });
+});
+
+// Daily / weekly reports (JSON)
+app.get('/api/admin/report/daily', async (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  const dateParam = (req.query.date || '').toString().trim();
+  let dateId;
+  if (dateParam) {
+    dateId = dateParam;
+  } else {
+    const easternNow = getEasternNow();
+    dateId = getDateId(easternNow);
+  }
+  const report = await buildDailyReport(dateId);
+  res.json({ ok: true, report });
+});
+
+app.get('/api/admin/report/weekly', async (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  const report = await buildWeeklyReport();
+  res.json({ ok: true, report });
+});
+
+// Send reports to Zapier webhook
+app.post('/api/admin/report/daily/send', async (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  if (!ZAPIER_HOOK_URL) {
+    return res.status(400).json({ ok: false, error: 'ZAPIER_HOOK_URL not configured' });
+  }
+  const dateParam = (req.query.date || '').toString().trim();
+  let dateId;
+  if (dateParam) {
+    dateId = dateParam;
+  } else {
+    const easternNow = getEasternNow();
+    dateId = getDateId(easternNow);
+  }
+  const report = await buildDailyReport(dateId);
+  try {
+    await axios.post(ZAPIER_HOOK_URL, {
+      type: 'daily_report',
+      date: report.date,
+      report
+    });
+    res.json({ ok: true, sent: true });
+  } catch (err) {
+    console.error('Error sending daily report to Zapier:', err.message);
+    res.status(500).json({ ok: false, error: 'Failed to send daily report to Zapier' });
+  }
+});
+
+app.post('/api/admin/report/weekly/send', async (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  if (!ZAPIER_HOOK_URL) {
+    return res.status(400).json({ ok: false, error: 'ZAPIER_HOOK_URL not configured' });
+  }
+  const report = await buildWeeklyReport();
+  try {
+    await axios.post(ZAPIER_HOOK_URL, {
+      type: 'weekly_report',
+      weekStartDate: report.weekStartDate,
+      report
+    });
+    res.json({ ok: true, sent: true });
+  } catch (err) {
+    console.error('Error sending weekly report to Zapier:', err.message);
+    res.status(500).json({ ok: false, error: 'Failed to send weekly report to Zapier' });
+  }
 });
 
 // GET /api/admin/users
@@ -1015,6 +1351,8 @@ app.post('/api/agent/hangup', async (req, res) => {
 app.post('/api/manual-dial', express.json(), async (req, res) => {
   const agentId = requireAgent(req, res);
   if (!agentId) return;
+  const easternNow = getEasternNow();
+  const reportDateId = getDateId(easternNow);
 
   const { toNumber, callerId, campaignId, reason } = req.body || {};
   if (!toNumber) {
@@ -1058,6 +1396,13 @@ app.post('/api/manual-dial', express.json(), async (req, res) => {
     };
     activeCallByAgent[agentId] = call.sid;
     lastAgentByNumber[toNumber] = agentId;
+
+    if (isWithinDailyReportWindow(easternNow) && isWithinWeeklyReportWindow(easternNow)) {
+      const daily = ensureDailyAgentMetric(reportDateId, agentId);
+      daily.totalCalls += 1;
+      saveReportMetrics();
+    }
+
     return res.json({ ok: true, callSid: call.sid });
   } catch (err) {
     console.error('Manual dial failed:', err.message);
@@ -2040,6 +2385,7 @@ app.post('/api/dialer/next', async (req, res) => {
   const agentId = requireAgent(req, res);
   if (!agentId) return;
   const easternNow = ensureLeaderboardWeek();
+  const reportDateId = getDateId(easternNow);
 
   const { campaignId } = req.body || {};
   const sessionCampaignId = req.session.assignedCampaignId || null;
@@ -2100,6 +2446,12 @@ app.post('/api/dialer/next', async (req, res) => {
     if (isWithinWeeklyWindow(easternNow)) {
       m.totalCalls += 1;
       markAgentActivity(agentId);
+    }
+
+    if (isWithinDailyReportWindow(easternNow) && isWithinWeeklyReportWindow(easternNow)) {
+      const daily = ensureDailyAgentMetric(reportDateId, agentId);
+      daily.totalCalls += 1;
+      saveReportMetrics();
     }
 
     activeLeadMetaByAgent[agentId] = {
@@ -2322,6 +2674,20 @@ app.post('/api/disposition', async (req, res) => {
     m.lastOutcome = safeOutcome;
     m.lastLeadName = leadName || null;
     m.lastTimestamp = new Date().toISOString();
+  }
+
+  const reportDateId = getDateId(easternNow);
+  if (isWithinDailyReportWindow(easternNow) && isWithinWeeklyReportWindow(easternNow)) {
+    const dailyAgent = ensureDailyAgentMetric(reportDateId, agentId);
+    dailyAgent.dispositions[safeOutcome] = (dailyAgent.dispositions[safeOutcome] || 0) + 1;
+    if (metricKey === 'answeredHuman') {
+      dailyAgent.liveConnects += 1;
+    }
+    if (campaignId) {
+      const dailyCampaign = ensureDailyCampaignMetric(reportDateId, String(campaignId));
+      dailyCampaign.dispositions[safeOutcome] = (dailyCampaign.dispositions[safeOutcome] || 0) + 1;
+    }
+    saveReportMetrics();
   }
   const meta = activeLeadMetaByAgent[agentId];
   const contactIdForStats = meta?.ghlContactId || null;
