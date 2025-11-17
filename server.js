@@ -2086,69 +2086,81 @@ async function fetchGhlLeadForCampaign(campaign) {
     const campaignId = campaign.id || campaign.campaignId || null;
     const stats = ensureCampaignStats(campaignId);
     const byContact = stats.byContact || {};
-    const params = {
-      location_id: GHL_LOCATION_ID,
-      pipeline_id: campaign.ghlPipelineId,
-      pipeline_stage_id: campaign.ghlStageId || undefined,
-      limit: 50,
-      page: 1
-    };
-    const res = await ghlClient.get('/opportunities/search', { params });
-    const collection = res.data?.opportunities || res.data?.data || [];
-    for (const opp of collection) {
-      const contactId = opp.contactId || opp.contact_id || null;
-      const contact =
-        opp.contact ||
-        (contactId ? await ghlFetchContact(contactId) : null);
-      if (!contact) continue;
-      if (isContactLocked(contactId)) continue;
+    let page = 1;
+    const limit = 50;
 
-      const contactKey = String(contactId || contact.id);
-      const contactStats = byContact[contactKey];
-      if (contactStats && NON_PICKUP_OUTCOMES.includes(contactStats.lastOutcome || '')) {
-        const now = Date.now();
-        if (contactStats.lastAttemptMs && (now - contactStats.lastAttemptMs) < NON_PICKUP_COOLDOWN_MS) {
-          // within 4-hour cooldown window since last non-pickup attempt
-          continue;
-        }
-        if ((contactStats.attempts || 0) >= MAX_NON_PICKUP_ATTEMPTS) {
-          // extra guard: if attempts >= 3, skip entirely
-          continue;
-        }
-      }
-
-      const tags = normalizeTagList(contact.tags);
-      if (!tags.includes(campaign.ghlTag)) continue;
-      // Skip if contact already has a final disposition we don't want to redial
-      const hasFinalDispo = tags.some(t => {
-        if (!t) return false;
-        const lower = t.toLowerCase();
-        return DISPOSITION_SKIP_TAGS.includes(lower);
-      });
-      if (hasFinalDispo) continue;
-      const phone = extractContactPhone(contact);
-      if (!phone) continue;
-      if (isRecentlyDialed(campaignId, phone, contactId || contact.id)) continue;
-
-      if (campaign.ghlStageId) {
-        await ghlUpdateOpportunity(opp.id, {
-          stageId: campaign.ghlStageId,
-          status: opp.status || 'open'
-        });
-      }
-
-      lockContact(contact.id, campaignId, null);
-      return {
-        id: contact.id,
-        name: buildContactName(contact),
-        phone,
-        email: contact.email || null,
-        ghlOpportunityId: opp.id,
-        ghlContactId: contact.id || contactId || null,
-        ghlPipelineId: opp.pipelineId || opp.pipeline_id,
-        ghlStageId: opp.stageId || opp.stage_id,
-        campaignTag: campaign.ghlTag
+    while (true) {
+      const params = {
+        location_id: GHL_LOCATION_ID,
+        pipeline_id: campaign.ghlPipelineId,
+        pipeline_stage_id: campaign.ghlStageId || undefined,
+        limit,
+        page
       };
+      const res = await ghlClient.get('/opportunities/search', { params });
+      const collection = res.data?.opportunities || res.data?.data || [];
+      if (!collection.length) break;
+
+      for (const opp of collection) {
+        const contactId = opp.contactId || opp.contact_id || null;
+        const contact =
+          opp.contact ||
+          (contactId ? await ghlFetchContact(contactId) : null);
+        if (!contact) continue;
+        if (isContactLocked(contactId)) continue;
+
+        const contactKey = String(contactId || contact.id);
+        const contactStats = byContact[contactKey];
+        if (contactStats && NON_PICKUP_OUTCOMES.includes(contactStats.lastOutcome || '')) {
+          const now = Date.now();
+          if (contactStats.lastAttemptMs && (now - contactStats.lastAttemptMs) < NON_PICKUP_COOLDOWN_MS) {
+            // within 4-hour cooldown window since last non-pickup attempt
+            continue;
+          }
+          if ((contactStats.attempts || 0) >= MAX_NON_PICKUP_ATTEMPTS) {
+            // extra guard: if attempts >= 3, skip entirely
+            continue;
+          }
+        }
+
+        const tags = normalizeTagList(contact.tags);
+        if (!tags.includes(campaign.ghlTag)) continue;
+        // Skip if contact already has a final disposition we don't want to redial
+        const hasFinalDispo = tags.some(t => {
+          if (!t) return false;
+          const lower = t.toLowerCase();
+          return DISPOSITION_SKIP_TAGS.includes(lower);
+        });
+        if (hasFinalDispo) continue;
+        const phone = extractContactPhone(contact);
+        if (!phone) continue;
+        if (isRecentlyDialed(campaignId, phone, contactId || contact.id)) continue;
+
+        if (campaign.ghlStageId) {
+          await ghlUpdateOpportunity(opp.id, {
+            stageId: campaign.ghlStageId,
+            status: opp.status || 'open'
+          });
+        }
+
+        lockContact(contact.id, campaignId, null);
+        return {
+          id: contact.id,
+          name: buildContactName(contact),
+          phone,
+          email: contact.email || null,
+          ghlOpportunityId: opp.id,
+          ghlContactId: contact.id || contactId || null,
+          ghlPipelineId: opp.pipelineId || opp.pipeline_id,
+          ghlStageId: opp.stageId || opp.stage_id,
+          campaignTag: campaign.ghlTag
+        };
+      }
+
+      if (collection.length < limit) break;
+      page += 1;
+      // Safety guard: avoid unbounded paging in pathological cases
+      if (page > 40) break; // up to ~2000 opportunities
     }
   } catch (err) {
     console.error('GHL fetch error:', err.response?.data || err.message);
