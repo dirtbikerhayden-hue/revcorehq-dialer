@@ -304,7 +304,8 @@ const NON_PICKUP_OUTCOMES = [
   'busy',
   'failed',
   'machine',
-  'machine_voicemail'
+  'machine_voicemail',
+  'callback_requested'
 ];
 const MAX_NON_PICKUP_ATTEMPTS = 3;
 const NON_PICKUP_REMOVED_TAG = 'removed 3 attempts made';
