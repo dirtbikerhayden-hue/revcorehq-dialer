@@ -1393,6 +1393,7 @@
 
     // will be set from /login or /me
     let agentId = null;
+    let allowAfterHoursOverride = false;
 
     const DAILY_GOAL_LIVE = 120;
     const DAILY_GOAL_BOOKED = 4;
@@ -1570,7 +1571,7 @@
       const pstParts = getZonedTimeParts('America/Los_Angeles');
       const estTime = `${estParts.hour || '--'}:${estParts.minute || '--'} ${estParts.dayPeriod || estParts.dayperiod || ''}`.trim();
       const pstTime = `${pstParts.hour || '--'}:${pstParts.minute || '--'} ${pstParts.dayPeriod || pstParts.dayperiod || ''}`.trim();
-      return `Outbound dialing is limited to <span>Mon–Sat, 9:00AM–8:00PM EST</span>.<br/>Current time: <span>${estTime} EST</span> / <span>${pstTime} PST</span>.`;
+      return `Outbound dialing is limited to <span>Mon–Sat, 9:00AM–5:00PM</span>.<br/>Current time: <span>${estTime} EST</span> / <span>${pstTime} PST</span>.`;
     }
 
     function setAgentLabel(label) {
@@ -1978,7 +1979,7 @@
         statusTextEl.innerHTML = 'Finish the current <span>live call</span> before dialing again.';
         return;
       }
-      if (!isWithinBusinessHoursClient()) {
+      if (!allowAfterHoursOverride && !isWithinBusinessHoursClient()) {
         statusTextEl.innerHTML = getBusinessHoursBlockedMessage();
         return;
       }
@@ -2195,7 +2196,7 @@
       const number = '+1' + document.getElementById('manualNumber').value.replace(/[^\d]/g, '').replace(/^1/, '');
       const caller = document.getElementById('manualCallerId').value.trim();
       const status = document.getElementById('manualStatus');
-      if (!isWithinBusinessHoursClient()) {
+      if (!allowAfterHoursOverride && !isWithinBusinessHoursClient()) {
         const msg = getBusinessHoursBlockedMessage();
         if (status) {
           status.innerHTML = msg;
@@ -2680,6 +2681,7 @@
 
         // success
         agentId = data.agentId || username;
+        allowAfterHoursOverride = !!data.allowAfterHours;
         _rehashUpdateAgentBadge(data.agentName || username);
         setAssignedCampaign(data.campaignId || null, data.campaignName || '');
         errBox.textContent = 'Preparing your softphone…';
@@ -2713,6 +2715,7 @@
 
         if (data.loggedIn) {
           agentId = data.agentId;
+          allowAfterHoursOverride = !!data.allowAfterHours;
           _rehashUpdateAgentBadge(data.agentName || data.agentId || 'Agent');
           setAssignedCampaign(data.campaignId || null, data.campaignName || '');
           console.log('[Dialer] Session already logged in as', agentId, '- setting up Twilio Device');
