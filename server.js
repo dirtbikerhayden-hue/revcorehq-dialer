@@ -2762,6 +2762,55 @@ app.all('/twilio/status', (req, res) => {
     saveAgentMetricsStore();
   }
 
+  // Auto-mark hard failures with 0s duration as bad numbers so they are skipped in future
+  if (CallStatus === 'failed') {
+    const durationSec = parseInt(CallDuration, 10);
+    const isZeroDuration = !CallDuration || Number.isNaN(durationSec) || durationSec === 0;
+    if (isZeroDuration) {
+      const lead = callInfo.lead || {};
+      const campaignId = callInfo.campaignId || lead.campaignId || null;
+      const safeCampaignId = campaignId ? String(campaignId) : null;
+      const contactIdForStats = lead.ghlContactId || lead.id || null;
+      const leadPhone = lead.phone || null;
+      const leadName = lead.name || null;
+
+      if (safeCampaignId || contactIdForStats || leadPhone) {
+        recordCampaignDisposition(safeCampaignId, agentId, 'bad_number', contactIdForStats);
+        // Fire-and-forget sync to GHL / local leads, similar to /api/disposition
+        if (lead.localLeadId) {
+          recordLocalLeadOutcome(
+            safeCampaignId || lead.campaignId || null,
+            { localLeadId: lead.localLeadId },
+            'bad_number',
+            '',
+            { leadPhone, leadName }
+          );
+        }
+        if (contactIdForStats) {
+          (async () => {
+            try {
+              await handleGhlDisposition(
+                agentId,
+                safeCampaignId || lead.campaignId || null,
+                {
+                  ghlContactId: contactIdForStats,
+                  ghlOpportunityId: lead.ghlOpportunityId || null,
+                  campaignId: safeCampaignId || lead.campaignId || null,
+                  campaignTag: lead.campaignTag || null
+                },
+                'bad_number',
+                '',
+                { leadPhone, leadName }
+              );
+            } catch (err) {
+              console.error('Error auto-tagging bad_number on failed call:', err.response?.data || err.message);
+            }
+          })().catch(() => {});
+        }
+      }
+    }
+  }
+
   if (CallStatus === 'completed') {
     if (activeCallByAgent[agentId] === CallSid) {
       delete activeCallByAgent[agentId];
