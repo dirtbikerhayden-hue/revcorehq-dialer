@@ -320,7 +320,7 @@ function recordCampaignDisposition(campaignId, agentId, outcome, contactId) {
   agentStats[outcome] = (agentStats[outcome] || 0) + 1;
   agentStats.total = (agentStats.total || 0) + 1;
 
-  // track per-contact attempts for non-pickup outcomes
+  // track per-contact attempts and last outcome
   if (contactId) {
     const key = String(contactId);
     if (!stats.byContact[key]) {
@@ -331,17 +331,16 @@ function recordCampaignDisposition(campaignId, agentId, outcome, contactId) {
       };
     }
     const contactStats = stats.byContact[key];
+    contactStats.lastOutcome = outcome;
+    contactStats.lastAttemptMs = Date.now();
+
     if (NON_PICKUP_OUTCOMES.includes(outcome)) {
       contactStats.attempts = (contactStats.attempts || 0) + 1;
-      contactStats.lastAttemptMs = Date.now();
-      contactStats.lastOutcome = outcome;
 
       if (contactStats.attempts >= MAX_NON_PICKUP_ATTEMPTS) {
         // mark in GHL so future fetches also skip by tag
         ghlAddTags(contactId, [NON_PICKUP_REMOVED_TAG]).catch(() => {});
       }
-    } else {
-      contactStats.lastOutcome = outcome;
     }
   }
 
@@ -370,6 +369,7 @@ const NON_PICKUP_OUTCOMES = [
 const MAX_NON_PICKUP_ATTEMPTS = 3;
 const NON_PICKUP_REMOVED_TAG = 'removed 3 attempts made';
 const NON_PICKUP_COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours
+const GLOBAL_RETRY_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes for any recent outcome
 const DISPOSITION_SKIP_TAGS = [
   'bad_number',
   'not_interested',
@@ -2115,6 +2115,14 @@ async function fetchGhlLeadForCampaign(campaign) {
         // Skip if this contact has already been marked as a bad number
         if (contactStats && contactStats.lastOutcome === 'bad_number') {
           continue;
+        }
+
+        // Global cooldown: skip any contact with a recent attempt, regardless of outcome
+        if (contactStats && contactStats.lastAttemptMs) {
+          const now = Date.now();
+          if (now - contactStats.lastAttemptMs < GLOBAL_RETRY_COOLDOWN_MS) {
+            continue;
+          }
         }
         if (contactStats && NON_PICKUP_OUTCOMES.includes(contactStats.lastOutcome || '')) {
           const now = Date.now();
