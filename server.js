@@ -277,6 +277,8 @@ function recordCampaignDisposition(campaignId, agentId, outcome, contactId) {
 let campaigns = loadCampaignMap();
 let campaignStats = loadCampaignStats();
 let localLeadStore = loadLocalLeadStore();
+let dailyAgentReport = {};
+let dailyCampaignReport = {};
 const reportMetricState = loadReportMetrics();
 dailyAgentReport = reportMetricState.agents || {};
 dailyCampaignReport = reportMetricState.campaigns || {};
@@ -429,9 +431,6 @@ function isWithinWeeklyReportWindow(easternDate) {
   if (day === 6) return isWithinDailyReportWindow(easternDate); // Saturday until 8pm
   return false;
 }
-
-let dailyAgentReport = {};
-let dailyCampaignReport = {};
 
 function loadReportMetrics() {
   try {
