@@ -2169,7 +2169,6 @@ async function getCampaignLeadStats(campaign) {
       }
       if (opportunities.length < limit) break;
       page += 1;
-      if (page > 15) break;
     }
     return { total, remaining };
   } catch (err) {
