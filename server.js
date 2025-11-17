@@ -90,6 +90,7 @@ const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const AGENT_SLOTS_FILE = path.join(DATA_DIR, 'agent-slots.json');
 const LOCAL_PRESENCE_FILE = path.join(DATA_DIR, 'local-presence.json');
 const REPORT_METRICS_FILE = path.join(DATA_DIR, 'report-metrics.json');
+const RECENT_DIAL_FILE = path.join(DATA_DIR, 'recent-dials.json');
 // High-priority inbound agents can be set later via config; default empty.
 const PRIORITY_INBOUND_AGENTS = [];
 
@@ -212,6 +213,41 @@ function listCampaignArray() {
 
 const DEFAULT_CAMPAIGN_STATS = {};
 const DEFAULT_LOCAL_LEADS = { queue: {}, completed: {} };
+const RECENT_DIAL_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+function loadRecentDialMap() {
+  try {
+    if (!fs.existsSync(RECENT_DIAL_FILE)) {
+      return {};
+    }
+    const raw = fs.readFileSync(RECENT_DIAL_FILE, 'utf8');
+    const parsed = JSON.parse(raw) || {};
+    const now = Date.now();
+    const cleaned = {};
+    Object.entries(parsed).forEach(([campaignId, entry]) => {
+      if (!entry || typeof entry !== 'object') return;
+      const ts = Number(entry.ts || 0);
+      if (!ts || now - ts > RECENT_DIAL_TTL_MS) return;
+      cleaned[campaignId] = {
+        phone: entry.phone || null,
+        contactId: entry.contactId || null,
+        ts
+      };
+    });
+    return cleaned;
+  } catch (err) {
+    console.error('Error loading recent-dials.json:', err);
+    return {};
+  }
+}
+
+function saveRecentDialMap() {
+  try {
+    fs.writeFileSync(RECENT_DIAL_FILE, JSON.stringify(recentDialMap, null, 2));
+  } catch (err) {
+    console.error('Error saving recent-dials.json:', err);
+  }
+}
 
 function loadCampaignStats() {
   try {
@@ -297,7 +333,7 @@ let dailyCampaignReport = {};
 const reportMetricState = loadReportMetrics();
 dailyAgentReport = reportMetricState.agents || {};
 dailyCampaignReport = reportMetricState.campaigns || {};
-const recentDialMap = {};
+const recentDialMap = loadRecentDialMap();
 const contactLocks = {}; // in-memory lock so a contact isn't dialed twice concurrently
 const NON_PICKUP_OUTCOMES = [
   'no_answer',
@@ -841,6 +877,7 @@ function markRecentlyDialed(campaignId, phone, contactId) {
     contactId: contactId || null,
     ts: Date.now()
   };
+  saveRecentDialMap();
 }
 
 function isContactLocked(contactId) {
