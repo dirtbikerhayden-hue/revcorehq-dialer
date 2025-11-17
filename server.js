@@ -312,6 +312,71 @@ const OUTCOME_LABELS = {
 };
 
 // ===============================
+//   LEADERBOARD WEEKLY WINDOW
+// ===============================
+
+let leaderboardWeekId = null;
+
+function getEasternNow() {
+  const now = new Date();
+  const easternString = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
+  return new Date(easternString);
+}
+
+function getLeaderboardWeekId(easternDate) {
+  const d = new Date(easternDate.getTime());
+  const day = d.getDay(); // 0 = Sun, 1 = Mon, ...
+  const hour = d.getHours();
+
+  // Start with Monday of the current calendar week
+  const monday = new Date(d.getTime());
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  monday.setDate(monday.getDate() + diffToMonday);
+  monday.setHours(0, 0, 0, 0);
+
+  // If it's Monday before 5am, treat it as part of the previous week
+  if (day === 1 && hour < 5) {
+    monday.setDate(monday.getDate() - 7);
+  }
+
+  const y = monday.getFullYear();
+  const m = String(monday.getMonth() + 1).padStart(2, '0');
+  const dd = String(monday.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
+function isWithinWeeklyWindow(easternDate) {
+  const day = easternDate.getDay();
+  const hour = easternDate.getHours();
+  const minute = easternDate.getMinutes();
+
+  // Monday: from 5:00 onward
+  if (day === 1) {
+    return hour > 5 || (hour === 5 && minute >= 0);
+  }
+  // Tuesday–Friday: all day
+  if (day >= 2 && day <= 5) return true;
+  // Saturday: until 20:00 (8pm)
+  if (day === 6) {
+    if (hour < 20) return true;
+    if (hour === 20 && minute === 0) return true;
+    return false;
+  }
+  // Sunday and the rest of Saturday night: outside window
+  return false;
+}
+
+function ensureLeaderboardWeek() {
+  const easternNow = getEasternNow();
+  const weekId = getLeaderboardWeekId(easternNow);
+  if (leaderboardWeekId && leaderboardWeekId !== weekId) {
+    Object.keys(metricsByAgent).forEach(key => { delete metricsByAgent[key]; });
+  }
+  leaderboardWeekId = weekId;
+  return easternNow;
+}
+
+// ===============================
 //         APP SETTINGS
 // ===============================
 
@@ -1868,6 +1933,7 @@ app.get('/api/campaigns', (req, res) => {
 
 app.get('/api/metrics/:agentId', (req, res) => {
   const { agentId } = req.params;
+  ensureLeaderboardWeek();
   const metrics = ensureAgentMetrics(agentId);
   const status = getAgentStatus(agentId);
   let statusDurationSec = null;
@@ -1888,6 +1954,7 @@ app.get('/api/metrics/:agentId', (req, res) => {
 
 // leaderboard used by admin dashboard
 app.get('/api/leaderboard', (req, res) => {
+  ensureLeaderboardWeek();
   const rows = Object.entries(metricsByAgent).map(([agentId, m]) => {
     const status = getAgentStatus(agentId);
     let statusDurationSec = null;
@@ -1972,6 +2039,7 @@ app.get('/api/leaderboard', (req, res) => {
 app.post('/api/dialer/next', async (req, res) => {
   const agentId = requireAgent(req, res);
   if (!agentId) return;
+  const easternNow = ensureLeaderboardWeek();
 
   const { campaignId } = req.body || {};
   const sessionCampaignId = req.session.assignedCampaignId || null;
@@ -2029,8 +2097,10 @@ app.post('/api/dialer/next', async (req, res) => {
     lastAgentByNumber[lead.phone] = agentId;
 
     const m = ensureAgentMetrics(agentId);
-    m.totalCalls += 1;
-    markAgentActivity(agentId);
+    if (isWithinWeeklyWindow(easternNow)) {
+      m.totalCalls += 1;
+      markAgentActivity(agentId);
+    }
 
     activeLeadMetaByAgent[agentId] = {
       ghlOpportunityId: leadPayload.ghlOpportunityId || null,
@@ -2119,6 +2189,7 @@ app.all('/twilio/voice', (req, res) => {
 });
 
 app.all('/twilio/status', (req, res) => {
+  const easternNow = ensureLeaderboardWeek();
   const payload = req.body && Object.keys(req.body).length ? req.body : req.query || {};
   const { CallSid, CallStatus, AnsweredBy, CallDuration } = payload;
 
@@ -2160,34 +2231,36 @@ app.all('/twilio/status', (req, res) => {
   const { agentId } = callInfo;
   const m = ensureAgentMetrics(agentId);
 
-  if (CallStatus === 'in-progress' || CallStatus === 'answered') {
-    if (!m.currentCallStartMs) {
-      m.currentCallStartMs = Date.now();
-    }
-  }
-
-  if (CallStatus === 'completed') {
-    if (AnsweredBy === 'human') m.answeredHuman += 1;
-    if (AnsweredBy === 'machine') m.answeredMachine += 1;
-    const durationSec = parseInt(CallDuration, 10);
-    if (!Number.isNaN(durationSec) && durationSec >= 0) {
-      m.totalTalkTimeSec += durationSec;
-      m.lastCallDurationSec = durationSec;
-      m.completedCallCount += 1;
-      if (m.completedCallCount > 0) {
-        m.avgCallDurationSec = Math.round(m.totalTalkTimeSec / m.completedCallCount);
+  if (isWithinWeeklyWindow(easternNow)) {
+    if (CallStatus === 'in-progress' || CallStatus === 'answered') {
+      if (!m.currentCallStartMs) {
+        m.currentCallStartMs = Date.now();
       }
     }
-    m.currentCallStartMs = null;
-  } else if (CallStatus === 'no-answer') {
-    m.noAnswer += 1;
-  } else if (CallStatus === 'busy') {
-    m.busy += 1;
-  } else if (CallStatus === 'failed') {
-    m.failed += 1;
-  }
 
-  markAgentActivity(agentId);
+    if (CallStatus === 'completed') {
+      if (AnsweredBy === 'human') m.answeredHuman += 1;
+      if (AnsweredBy === 'machine') m.answeredMachine += 1;
+      const durationSec = parseInt(CallDuration, 10);
+      if (!Number.isNaN(durationSec) && durationSec >= 0) {
+        m.totalTalkTimeSec += durationSec;
+        m.lastCallDurationSec = durationSec;
+        m.completedCallCount += 1;
+        if (m.completedCallCount > 0) {
+          m.avgCallDurationSec = Math.round(m.totalTalkTimeSec / m.completedCallCount);
+        }
+      }
+      m.currentCallStartMs = null;
+    } else if (CallStatus === 'no-answer') {
+      m.noAnswer += 1;
+    } else if (CallStatus === 'busy') {
+      m.busy += 1;
+    } else if (CallStatus === 'failed') {
+      m.failed += 1;
+    }
+
+    markAgentActivity(agentId);
+  }
 
   if (CallStatus === 'completed') {
     if (activeCallByAgent[agentId] === CallSid) {
@@ -2211,6 +2284,7 @@ app.post('/twilio/recording', (req, res) => {
 
 app.post('/api/disposition', async (req, res) => {
   const { agentId, campaignId, outcome, notes, leadPhone, leadName } = req.body;
+  const easternNow = ensureLeaderboardWeek();
 
   const safeOutcome = outcome || 'other';
   console.log('Disposition:', {
@@ -2238,15 +2312,17 @@ app.post('/api/disposition', async (req, res) => {
   };
 
   const metricKey = metricOutcomeMap[safeOutcome];
-  if (metricKey && typeof m[metricKey] === 'number') {
-    m[metricKey] += 1;
+  if (isWithinWeeklyWindow(easternNow)) {
+    if (metricKey && typeof m[metricKey] === 'number') {
+      m[metricKey] += 1;
+    }
+
+    if (safeOutcome === 'booked') m.conversions += 1;
+
+    m.lastOutcome = safeOutcome;
+    m.lastLeadName = leadName || null;
+    m.lastTimestamp = new Date().toISOString();
   }
-
-  if (safeOutcome === 'booked') m.conversions += 1;
-
-  m.lastOutcome = safeOutcome;
-  m.lastLeadName = leadName || null;
-  m.lastTimestamp = new Date().toISOString();
   const meta = activeLeadMetaByAgent[agentId];
   const contactIdForStats = meta?.ghlContactId || null;
 

@@ -1039,6 +1039,24 @@
       color: var(--text-subtle);
     }
 
+    .leaderboard-item.rank-1 {
+      background: radial-gradient(circle at left, rgba(74, 222, 128, 0.18), transparent 70%);
+      border-radius: 999px;
+      padding: 6px 8px;
+    }
+
+    .leaderboard-item.rank-2 {
+      background: radial-gradient(circle at left, rgba(96, 165, 250, 0.14), transparent 70%);
+      border-radius: 999px;
+      padding: 6px 8px;
+    }
+
+    .leaderboard-item.rank-3 {
+      background: radial-gradient(circle at left, rgba(192, 132, 252, 0.12), transparent 70%);
+      border-radius: 999px;
+      padding: 6px 8px;
+    }
+
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb {
@@ -1823,8 +1841,9 @@
 
         lbListEl.innerHTML = (top || []).map(row => {
           const label = row.agentId === agentId ? 'You' : `Agent ${row.agentId}`;
+          const rankClass = row.rank ? `rank-${Math.min(row.rank, 3)}` : '';
           return `
-            <li class="leaderboard-item">
+            <li class="leaderboard-item ${rankClass}">
               <div class="leaderboard-left">
                 <strong>${label}</strong><br/>
                 <span>${row.conversions || 0} booked • ${row.live || 0} live</span>
