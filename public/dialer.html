@@ -1779,10 +1779,14 @@
     }
 
     function updateMuteButton() {
-      if (!btnMute) return;
-      btnMute.disabled = !activeConnection;
-      btnMute.textContent = isMuted ? 'Unmute Mic' : 'Mute Mic';
-      btnMute.classList.toggle('muted', isMuted);
+      if (btnMute) {
+        btnMute.disabled = !activeConnection;
+        btnMute.textContent = isMuted ? 'Unmute Mic' : 'Mute Mic';
+        btnMute.classList.toggle('muted', isMuted);
+      }
+      if (btnKeypad) {
+        btnKeypad.disabled = !activeConnection;
+      }
     }
 
     function setMuteState(nextState) {
