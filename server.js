@@ -366,14 +366,9 @@ const NON_PICKUP_OUTCOMES = [
   'machine_voicemail',
   'callback_requested'
 ];
-const VOICEMAIL_OUTCOMES = [
-  'machine',
-  'machine_voicemail'
-];
 const MAX_NON_PICKUP_ATTEMPTS = 3;
 const NON_PICKUP_REMOVED_TAG = 'removed 3 attempts made';
-const NON_PICKUP_COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours for non-voicemail non-pickups
-const VOICEMAIL_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours for voicemail outcomes
+const NON_PICKUP_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours for all non-pickup outcomes
 const GLOBAL_RETRY_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes for any recent outcome
 const DISPOSITION_SKIP_TAGS = [
   'bad_number',
@@ -2136,16 +2131,11 @@ async function fetchGhlLeadForCampaign(campaign) {
         }
         if (contactStats && NON_PICKUP_OUTCOMES.includes(contactStats.lastOutcome || '')) {
           const now = Date.now();
-          const lastOutcome = contactStats.lastOutcome || '';
           if (contactStats.lastAttemptMs) {
             const ageMs = now - contactStats.lastAttemptMs;
-            if (VOICEMAIL_OUTCOMES.includes(lastOutcome)) {
-              // For voicemail outcomes, enforce at least 24 hours between attempts
-              if (ageMs < VOICEMAIL_COOLDOWN_MS) {
-                continue;
-              }
-            } else if (ageMs < NON_PICKUP_COOLDOWN_MS) {
-              // For other non-pickup outcomes, enforce the shorter cooldown
+            // For all non-pickup outcomes (no answer, busy, failed, machine, voicemail, callback requested),
+            // enforce at least 24 hours between attempts.
+            if (ageMs < NON_PICKUP_COOLDOWN_MS) {
               continue;
             }
           }
