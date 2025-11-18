@@ -1186,7 +1186,7 @@
           <button id="btnKeypad" class="btn-ghost" disabled style="margin-left:8px;">Keypad</button>
         </div>
 
-        <div class="current-lead" id="currentLeadBlock" style="opacity: 0.7;">
+          <div class="current-lead" id="currentLeadBlock" style="opacity: 0.7;">
           <div class="current-lead-title">Current Lead</div>
           <div class="current-lead-main">
             <div>
@@ -1198,6 +1198,7 @@
           <div class="current-lead-meta">
             <span class="tag-chip" id="leadCampaignTag">Campaign: —</span>
             <span class="tag-chip">Local Presence: Active</span>
+            <span class="tag-chip" id="leadAttemptMeta" style="display:none;"></span>
           </div>
         </div>
         <div class="disposition-block" id="dispoBlock" style="display:none;">
@@ -1531,6 +1532,7 @@
     const agentPillEl         = document.getElementById('agentPill');
     const assignedCampaignDisplayEl = document.getElementById('assignedCampaignDisplay');
     const assignedCampaignNoteEl = document.getElementById('assignedCampaignNote');
+    const leadAttemptMetaEl   = document.getElementById('leadAttemptMeta');
     const callbackNumberDisplayEl = document.getElementById('callbackNumberDisplay');
     const avgDurationEl       = document.getElementById('m-avg-duration');
     const lastDurationEl      = document.getElementById('m-last-duration');
@@ -1983,12 +1985,31 @@
         hasPendingDispo = false;
         notesEl.value = '';
         btnEnd.disabled = false;
+        if (leadAttemptMetaEl) {
+          leadAttemptMetaEl.style.display = 'none';
+          leadAttemptMetaEl.textContent = '';
+        }
         return;
       }
       currentLeadBlockEl.style.opacity = 1;
       leadNameEl.textContent = lead.name || 'Lead';
       leadPhoneEl.textContent = lead.phone || '';
       leadCampaignTagEl.textContent = `Campaign: ${lead.campaignName || assignedCampaignName || '—'}`;
+      if (leadAttemptMetaEl) {
+        const attempts = Number(lead.attempts || 0);
+        const lastOutcomeKey = (lead.lastOutcome || '').toLowerCase();
+        let label = '';
+        if (!attempts) {
+          label = 'Attempt 1 • No prior dispo';
+        } else {
+          const friendly =
+            DISPOSITION_LABELS[lastOutcomeKey] ||
+            (lastOutcomeKey ? lastOutcomeKey.replace(/_/g, ' ') : 'Unknown');
+          label = `Attempt ${attempts + 1} • Last: ${friendly}`;
+        }
+        leadAttemptMetaEl.textContent = label;
+        leadAttemptMetaEl.style.display = label ? 'inline-flex' : 'none';
+      }
       bumpCallState('Dialing');
       dispoBlockEl.style.display = 'block';
       hasPendingDispo = true;

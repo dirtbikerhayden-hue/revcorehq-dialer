@@ -366,9 +366,14 @@ const NON_PICKUP_OUTCOMES = [
   'machine_voicemail',
   'callback_requested'
 ];
+const VOICEMAIL_OUTCOMES = [
+  'machine',
+  'machine_voicemail'
+];
 const MAX_NON_PICKUP_ATTEMPTS = 3;
 const NON_PICKUP_REMOVED_TAG = 'removed 3 attempts made';
-const NON_PICKUP_COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours
+const NON_PICKUP_COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours for non-voicemail non-pickups
+const VOICEMAIL_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours for voicemail outcomes
 const GLOBAL_RETRY_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes for any recent outcome
 const DISPOSITION_SKIP_TAGS = [
   'bad_number',
@@ -2131,9 +2136,18 @@ async function fetchGhlLeadForCampaign(campaign) {
         }
         if (contactStats && NON_PICKUP_OUTCOMES.includes(contactStats.lastOutcome || '')) {
           const now = Date.now();
-          if (contactStats.lastAttemptMs && (now - contactStats.lastAttemptMs) < NON_PICKUP_COOLDOWN_MS) {
-            // within 4-hour cooldown window since last non-pickup attempt
-            continue;
+          const lastOutcome = contactStats.lastOutcome || '';
+          if (contactStats.lastAttemptMs) {
+            const ageMs = now - contactStats.lastAttemptMs;
+            if (VOICEMAIL_OUTCOMES.includes(lastOutcome)) {
+              // For voicemail outcomes, enforce at least 24 hours between attempts
+              if (ageMs < VOICEMAIL_COOLDOWN_MS) {
+                continue;
+              }
+            } else if (ageMs < NON_PICKUP_COOLDOWN_MS) {
+              // For other non-pickup outcomes, enforce the shorter cooldown
+              continue;
+            }
           }
           if ((contactStats.attempts || 0) >= MAX_NON_PICKUP_ATTEMPTS) {
             // extra guard: if attempts >= 3, skip entirely
@@ -2171,7 +2185,11 @@ async function fetchGhlLeadForCampaign(campaign) {
           ghlContactId: contact.id || contactId || null,
           ghlPipelineId: opp.pipelineId || opp.pipeline_id,
           ghlStageId: opp.stageId || opp.stage_id,
-          campaignTag: campaign.ghlTag
+          campaignTag: campaign.ghlTag,
+          // surface attempt metadata to the dialer UI so agents can see history
+          attempts: contactStats ? (contactStats.attempts || 0) : 0,
+          lastOutcome: contactStats ? (contactStats.lastOutcome || null) : null,
+          lastAttemptMs: contactStats ? (contactStats.lastAttemptMs || null) : null
         };
       }
 
@@ -2852,6 +2870,8 @@ app.post('/twilio/recording', (req, res) => {
 app.post('/api/disposition', async (req, res) => {
   const { agentId, campaignId, outcome, notes, leadPhone, leadName } = req.body;
   const easternNow = ensureLeaderboardWeek();
+  const normalizedAgentId = normalizeUsername(agentId);
+  const dialInfo = users && normalizedAgentId ? users[normalizedAgentId] : null;
 
   const safeOutcome = outcome || 'other';
   console.log('Disposition:', {
@@ -2961,11 +2981,11 @@ app.post('/api/disposition', async (req, res) => {
         notes,
         leadPhone,
         leadName,
-   agentId,
-   agentName: dialInfo?.name || agentId,
-   campaignId,
-    timestamp: m.lastTimestamp
-  });
+        agentId,
+        agentName: dialInfo?.name || agentId,
+        campaignId,
+        timestamp: m.lastTimestamp
+      });
     } catch (err) {
       console.error('Error sending disposition to Zapier:', err.message);
     }
