@@ -1070,24 +1070,19 @@
       color: var(--text-subtle);
     }
 
+    .leaderboard-right.medal {
+      font-size: 0.9rem;
+    }
+
     .leaderboard-item.rank-1 {
       position: relative;
       border-radius: 999px;
       padding: 6px 10px;
       background: radial-gradient(circle at left, rgba(74, 222, 128, 0.20), transparent 70%);
-      overflow: hidden;
-    }
-
-    .leaderboard-item.rank-1::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
       border: 1px solid rgba(74, 222, 128, 0.9);
       box-shadow:
         0 0 8px rgba(74, 222, 128, 0.6),
         0 0 18px rgba(34, 197, 94, 0.6);
-      pointer-events: none;
       animation: rankOneHalo 3s ease-in-out infinite;
     }
 
@@ -1095,18 +1090,9 @@
       position: relative;
       border-radius: 999px;
       padding: 6px 10px;
-      background: radial-gradient(circle at left, rgba(96, 165, 250, 0.12), transparent 70%);
-      overflow: hidden;
-    }
-
-    .leaderboard-item.rank-2::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      border: 1px solid rgba(96, 165, 250, 0.45);
-      box-shadow: 0 0 8px rgba(96, 165, 250, 0.3);
-      pointer-events: none;
+      background: radial-gradient(circle at left, rgba(96, 165, 250, 0.10), transparent 70%);
+      border: 1px solid rgba(96, 165, 250, 0.55);
+      box-shadow: 0 0 10px rgba(96, 165, 250, 0.35);
       animation: rankTwoHalo 4.5s ease-in-out infinite;
     }
 
@@ -1672,6 +1658,24 @@
       return `${firstFormatted} ${lastInitial}`;
     }
 
+    function formatDisplayPhone(raw) {
+      if (!raw) return '';
+      const digits = String(raw).replace(/[^\d]/g, '');
+      if (digits.length === 11 && digits.startsWith('1')) {
+        const a = digits.slice(1, 4);
+        const b = digits.slice(4, 7);
+        const c = digits.slice(7, 11);
+        return `(${a})${b}-${c}`;
+      }
+      if (digits.length === 10) {
+        const a = digits.slice(0, 3);
+        const b = digits.slice(3, 6);
+        const c = digits.slice(6, 10);
+        return `(${a})${b}-${c}`;
+      }
+      return raw;
+    }
+
     function extractAreaCodeFromPhone(phone) {
       if (!phone) return null;
       const digits = String(phone).replace(/[^\d]/g, '');
@@ -1792,19 +1796,7 @@
     function updateCallbackNumberDisplay() {
       if (!callbackNumberDisplayEl) return;
       if (agentCallbackNumber) {
-        const digits = String(agentCallbackNumber).replace(/[^\d]/g, '');
-        let formatted = agentCallbackNumber;
-        if (digits.length === 11 && digits.startsWith('1')) {
-          const a = digits.slice(1, 4);
-          const b = digits.slice(4, 7);
-          const c = digits.slice(7, 11);
-          formatted = `(${a})${b}-${c}`;
-        } else if (digits.length === 10) {
-          const a = digits.slice(0, 3);
-          const b = digits.slice(3, 6);
-          const c = digits.slice(6, 10);
-          formatted = `(${a})${b}-${c}`;
-        }
+        const formatted = formatDisplayPhone(agentCallbackNumber);
         callbackNumberDisplayEl.textContent = formatted;
       } else {
         callbackNumberDisplayEl.textContent = 'Auto (local presence / default)';
@@ -2269,13 +2261,19 @@
           const isMe = row.agentId === agentId;
           const label = isMe ? `${displayName} (You)` : displayName;
           const rankClass = row.rank ? `rank-${Math.min(row.rank, 3)}` : '';
+          let medal = '';
+          if (row.rank === 1) medal = '🥇';
+          else if (row.rank === 2) medal = '🥈';
+          else if (row.rank === 3) medal = '🥉';
+          const rightLabel = medal || `#${row.rank || '—'}`;
+          const rightClass = medal ? 'leaderboard-right medal' : 'leaderboard-right';
           return `
             <li class="leaderboard-item ${rankClass}">
               <div class="leaderboard-left">
                 <strong>${label}</strong><br/>
                 <span><span class="lb-booked">${row.conversions || 0} booked</span> • ${row.live || 0} live</span>
               </div>
-              <div class="leaderboard-right">#${row.rank || '—'}</div>
+              <div class="${rightClass}">${rightLabel}</div>
             </li>
           `;
         }).join('');
@@ -2383,7 +2381,9 @@
        : (notesEl.value || '');
      const leadPhone  = currentLead.phone;
      const leadName   = currentLead.name || '';
-     const campaignId = currentCampaignId || assignedCampaignId;
+     const campaignId = currentLead.isInbound
+       ? null
+       : (currentCampaignId || assignedCampaignId);
 
      const friendlyLabel = DISPOSITION_LABELS[outcome] || outcome;
      statusTextEl.textContent = isAuto
@@ -2872,6 +2872,19 @@
           }
 
           call.on('accept', () => {
+            if (!currentLead) {
+              const inboundPhone = formatDisplayPhone(from);
+              const inboundLead = {
+                name: inboundPhone || 'Inbound caller',
+                phone: inboundPhone || from || '',
+                campaignName: 'Inbound',
+                attempts: 0,
+                lastOutcome: null,
+                isInbound: true
+              };
+              setCurrentLead(inboundLead);
+            }
+
             const leadName = (currentLead && currentLead.name) || 'Lead';
             bumpCallState('Live call');
             statusTextEl.innerHTML = `Live with <span>${leadName}</span>.`;
