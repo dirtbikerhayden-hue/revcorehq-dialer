@@ -32,9 +32,10 @@
         "Segoe UI", sans-serif;
       color: var(--text-main);
       background:
-        radial-gradient(circle at top left, rgba(61, 169, 255, 0.22), transparent 55%),
-        radial-gradient(circle at 80% 120%, rgba(77, 243, 163, 0.2), transparent 60%),
+        radial-gradient(circle at top left, rgba(61, 169, 255, 0.36), transparent 55%),
+        radial-gradient(circle at 80% 120%, rgba(77, 243, 163, 0.32), transparent 60%),
         radial-gradient(circle at center, #020617 0, #020617 40%, #020617 100%);
+      background-position: 0 0, 100% 100%, 50% 50%;
       display: flex;
       align-items: flex-start;
       justify-content: center;
@@ -42,6 +43,7 @@
       overflow-x: hidden;
       overflow-y: auto;
       position: relative;
+      animation: bgShift 32s ease-in-out infinite alternate;
     }
 
     /* ---------- FLOATING WHITE BUBBLES / STARS ---------- */
@@ -50,8 +52,8 @@
       position: absolute;
       border-radius: 999px;
       background: radial-gradient(circle at 30% 20%, #ffffff, rgba(255,255,255,0.05));
-      opacity: 0.12;
-      filter: blur(0.5px);
+      opacity: 0.35;
+      filter: blur(0.2px);
       animation: floatUp linear infinite;
     }
 
@@ -90,7 +92,7 @@
       height: 2px;
       border-radius: 50%;
       background: #ffffff;
-      opacity: 0.28;
+      opacity: 0.5;
       box-shadow:
         120px 40px 0 0 rgba(255,255,255,0.5),
         340px 160px 0 0 rgba(255,255,255,0.4),
@@ -101,6 +103,15 @@
         1040px 180px 0 0 rgba(255,255,255,0.35),
         540px 340px 0 0 rgba(255,255,255,0.25);
       pointer-events: none;
+    }
+
+    @keyframes bgShift {
+      0% {
+        background-position: -40px 0, 100% 120%, 50% 45%;
+      }
+      100% {
+        background-position: 20px -30px, 90% 100%, 50% 60%;
+      }
     }
 
     .shell {
@@ -183,16 +194,20 @@
       color: var(--text-subtle);
       text-align: right;
       line-height: 1.2;
+      display: inline-flex;
+      align-items: baseline;
+      gap: 10px;
     }
 
-    .clock-line-main {
+    .clock-line-main,
+    .clock-line-secondary {
       font-weight: 600;
       color: var(--text-main);
-    }
-
-    .clock-line-secondary {
-      font-size: 0.72rem;
-      opacity: 0.9;
+      font-size: 0.78rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: radial-gradient(circle at top left, rgba(15,23,42,0.9), rgba(15,23,42,0.98));
+      border: 1px solid rgba(148, 163, 184, 0.4);
     }
 
     .title-block h1 {
@@ -274,27 +289,25 @@
       100% { box-shadow: 0 0 8px rgba(248, 113, 113, 0.2); }
     }
 
-    .assigned-campaign-display {
-      border: 1px solid rgba(148, 163, 184, 0.35);
-      border-radius: 14px;
-      padding: 10px 14px;
-      font-size: 0.9rem;
-      background: rgba(6, 12, 32, 0.96);
-      color: var(--text-main);
-      min-height: 42px;
+    .assigned-campaign-inline {
       display: flex;
-      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: baseline;
+      font-size: 0.9rem;
+      color: var(--text-main);
+      margin-bottom: 4px;
     }
 
-    .assigned-campaign-display.unassigned {
-      color: #fecaca;
-      border-color: rgba(248, 113, 113, 0.6);
-    }
-
-    .assigned-campaign-note {
+    .assigned-label {
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
       font-size: 0.72rem;
       color: var(--text-subtle);
-      margin-top: 4px;
+    }
+
+    .assigned-value.unassigned {
+      color: #fecaca;
     }
 
     .row {
@@ -1095,23 +1108,74 @@
     }
 
     .callback-row {
-      margin-top: 6px;
-      font-size: 12px;
-      color: var(--text-soft);
+      margin-top: 4px;
+      font-size: 0.86rem;
+      color: var(--text-subtle);
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 8px;
+      gap: 6px;
+      align-items: baseline;
     }
 
     .callback-label {
-      opacity: 0.8;
+      opacity: 0.9;
     }
 
     .callback-value {
-      font-weight: 500;
+      font-weight: 600;
       color: var(--accent);
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 1.05rem;
+      letter-spacing: 0.06em;
+    }
+
+    .prospect-tz-helper {
+      margin: 8px 0 10px;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-subtle);
+    }
+
+    .prospect-tz-helper span {
+      font-weight: 500;
+      color: var(--accent);
+    }
+
+    .leaderboard-item.rank-1 {
+      background: radial-gradient(circle at left, rgba(74, 222, 128, 0.24), transparent 70%);
+      border-radius: 999px;
+      padding: 6px 10px;
+      border: 1px solid rgba(74, 222, 128, 0.9);
+      box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.45);
+      animation: rankOneGlow 3.2s ease-in-out infinite;
+    }
+
+    .leaderboard-item.rank-2 {
+      background: radial-gradient(circle at left, rgba(96, 165, 250, 0.18), transparent 70%);
+      border-radius: 999px;
+      padding: 6px 10px;
+      border: 1px solid rgba(96, 165, 250, 0.65);
+      box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.3);
+      animation: rankTwoGlow 4s ease-in-out infinite;
+    }
+
+    .leaderboard-item.rank-3 {
+      background: transparent;
+      border-radius: 0;
+      padding: 4px 0;
+      border: none;
+      box-shadow: none;
+    }
+
+    @keyframes rankOneGlow {
+      0%   { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.45); }
+      50%  { box-shadow: 0 0 26px 0 rgba(74, 222, 128, 0.65); }
+      100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.45); }
+    }
+
+    @keyframes rankTwoGlow {
+      0%   { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.3); }
+      50%  { box-shadow: 0 0 18px 0 rgba(96, 165, 250, 0.5); }
+      100% { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.3); }
     }
   </style>
 
@@ -1127,7 +1191,7 @@
   <div class="bubble b5"></div>
   <div class="bubble b6"></div>
 
-  <div class="page-stack">
+      <div class="page-stack">
     <div class="shell">
     <!-- LEFT: Main dialer controls -->
     <section class="card">
@@ -1154,12 +1218,13 @@
 
         <div class="row">
           <div class="campaign-group">
-            <label>Assigned Campaign</label>
-            <div class="assigned-campaign-display" id="assignedCampaignDisplay">
-              Waiting for assignment…
+            <div class="assigned-campaign-inline">
+              <span class="assigned-label">Assigned Campaign:</span>
+              <span class="assigned-value" id="assignedCampaignDisplay">Waiting for assignment…</span>
             </div>
-            <div class="assigned-campaign-note" id="assignedCampaignNote">
-              Your manager will assign one campaign per session.
+            <div class="callback-row">
+              <span class="callback-label">Your Callback Number:</span>
+              <span class="callback-value" id="callbackNumberDisplay">Auto (local presence / default)</span>
             </div>
           </div>
 
@@ -1176,10 +1241,6 @@
           Standing by. Waiting for campaign assignment.
         </div>
         <div class="status-chip paused" id="sessionChip">Paused</div>
-      </div>
-      <div class="callback-row">
-        <span class="callback-label">Your Callback Number</span>
-        <span class="callback-value" id="callbackNumberDisplay">Auto (local presence / default)</span>
       </div>
         <div class="call-utility-row">
           <button id="btnMute" class="btn-ghost" disabled>Mute Mic</button>
@@ -1233,16 +1294,6 @@
       <section class="card metrics-card">
         <div class="card-inner">
           <div class="side-card-title">Today&apos;s Numbers</div>
-          <div class="duration-block">
-            <div class="duration-item">
-              <div class="duration-label">Avg Call Duration</div>
-              <div class="duration-value" id="m-avg-duration">0s</div>
-            </div>
-            <div class="duration-item">
-              <div class="duration-label">Last Call Duration</div>
-              <div class="duration-value" id="m-last-duration">0s</div>
-            </div>
-          </div>
           <div class="goal-grid">
             <div class="goal-card" id="goalLiveCard">
               <div class="goal-label">Live Conversations</div>
@@ -1291,7 +1342,7 @@
       <section class="card leaderboard-card">
         <div class="card-inner">
           <div class="leaderboard-header">
-            <span class="side-card-title" style="margin-bottom:0;">Mini Leaderboard</span>
+            <span class="side-card-title" style="margin-bottom:0;">Weekly Leaderboard</span>
             <span class="leaderboard-rank" id="lbRank">Rank: —</span>
           </div>
           <ul class="leaderboard-list" id="lbList"></ul>
@@ -1391,9 +1442,12 @@
 
     <div>
       <div class="calendar-title">Book a Demo</div>
+      <div class="prospect-tz-helper">
+        Prospect Time Zone (Still Verify): <span id="prospectTimezoneDisplay">—</span>
+      </div>
       <iframe src="https://api.leadconnectorhq.com/widget/booking/NV47jMb2Se8WlgRuKuA5" class="calendar-frame" scrolling="no" id="NV47jMb2Se8WlgRuKuA5_1763294635003"></iframe>
       <script src="https://link.msgsndr.com/js/form_embed.js" type="text/javascript"></script>
-      <p style="margin: 10px 0 0; color: var(--text-subtle); font-size: 0.85rem;">
+      <p style="margin: 10px 0 0; color: var(--text-subtle); font-size: 0.85rem; text-align:center;">
         Please verify that the selected time zone reflects the prospect’s state prior to scheduling.
       </p>
     </div>
@@ -1532,7 +1586,6 @@
     const agentStatusDurationEl = document.getElementById('agentStatusDuration');
     const agentPillEl         = document.getElementById('agentPill');
     const assignedCampaignDisplayEl = document.getElementById('assignedCampaignDisplay');
-    const assignedCampaignNoteEl = document.getElementById('assignedCampaignNote');
     const leadAttemptMetaEl   = document.getElementById('leadAttemptMeta');
     const callbackNumberDisplayEl = document.getElementById('callbackNumberDisplay');
     const avgDurationEl       = document.getElementById('m-avg-duration');
@@ -1562,6 +1615,7 @@
     const incomingEndBtn      = document.getElementById('incomingEndBtn');
     const clockEstEl          = document.getElementById('clockEST');
     const clockPstEl          = document.getElementById('clockPST');
+    const prospectTimezoneDisplayEl = document.getElementById('prospectTimezoneDisplay');
     const canRequestSpeakerSelection =
       typeof document.createElement === 'function' &&
       typeof document.createElement('audio').setSinkId === 'function';
@@ -1578,6 +1632,64 @@
     const BUSINESS_TIMEZONE = 'America/New_York';
     const BUSINESS_OPEN_HOUR = 9;
     const BUSINESS_CLOSE_HOUR = 20;
+
+    function formatAgentIdDisplay(rawId) {
+      if (!rawId) return '';
+      const id = String(rawId).trim();
+      if (!id) return '';
+      const compact = id.replace(/\s+/g, '');
+      if (compact.length < 2) {
+        return compact.charAt(0).toUpperCase();
+      }
+      const base = compact.slice(0, -1).toLowerCase();
+      const lastInitial = compact.slice(-1).toUpperCase();
+      const firstFormatted = base.charAt(0).toUpperCase() + base.slice(1);
+      return `${firstFormatted} ${lastInitial}`;
+    }
+
+    function extractAreaCodeFromPhone(phone) {
+      if (!phone) return null;
+      const digits = String(phone).replace(/[^\d]/g, '');
+      if (digits.length === 11 && digits.startsWith('1')) {
+        return digits.slice(1, 4);
+      }
+      if (digits.length === 10) {
+        return digits.slice(0, 3);
+      }
+      return null;
+    }
+
+    const PST_AREA_CODES = new Set([
+      '209','213','310','323','341','408','415','424','442','510','530','559',
+      '562','619','626','628','650','657','661','669','707','714','747','760',
+      '805','818','820','831','858','909','916','925','949','951',
+      '206','253','360','425','509',
+      '503','541','971',
+      '208','986',
+      '702','725',
+      '775',
+      '907'
+    ]);
+
+    function guessTimezoneFromAreaCode(areaCode) {
+      if (!areaCode) return null;
+      return PST_AREA_CODES.has(areaCode) ? 'PST' : 'EST';
+    }
+
+    function updateProspectTimezoneDisplay(phone) {
+      if (!prospectTimezoneDisplayEl) return;
+      if (!phone) {
+        prospectTimezoneDisplayEl.textContent = '—';
+        return;
+      }
+      const area = extractAreaCodeFromPhone(phone);
+      if (!area) {
+        prospectTimezoneDisplayEl.textContent = 'Unknown';
+        return;
+      }
+      const tz = guessTimezoneFromAreaCode(area) || 'EST';
+      prospectTimezoneDisplayEl.textContent = `${tz} (area ${area})`;
+    }
 
     function getZonedTimeParts(timeZone) {
       const now = new Date();
@@ -1655,7 +1767,20 @@
     function updateCallbackNumberDisplay() {
       if (!callbackNumberDisplayEl) return;
       if (agentCallbackNumber) {
-        callbackNumberDisplayEl.textContent = agentCallbackNumber;
+        const digits = String(agentCallbackNumber).replace(/[^\d]/g, '');
+        let formatted = agentCallbackNumber;
+        if (digits.length === 11 && digits.startsWith('1')) {
+          const a = digits.slice(1, 4);
+          const b = digits.slice(4, 7);
+          const c = digits.slice(7, 11);
+          formatted = `(${a}) ${b}-${c}`;
+        } else if (digits.length === 10) {
+          const a = digits.slice(0, 3);
+          const b = digits.slice(3, 6);
+          const c = digits.slice(6, 10);
+          formatted = `(${a}) ${b}-${c}`;
+        }
+        callbackNumberDisplayEl.textContent = formatted;
       } else {
         callbackNumberDisplayEl.textContent = 'Auto (local presence / default)';
       }
@@ -1673,15 +1798,9 @@
         if (assignedCampaignId) {
           assignedCampaignDisplayEl.textContent = assignedCampaignName || assignedCampaignId;
           assignedCampaignDisplayEl.classList.remove('unassigned');
-          if (assignedCampaignNoteEl) {
-            assignedCampaignNoteEl.textContent = 'All dials will use this campaign.';
-          }
         } else {
-          assignedCampaignDisplayEl.textContent = 'No campaign assigned.';
+          assignedCampaignDisplayEl.textContent = 'No campaign assigned';
           assignedCampaignDisplayEl.classList.add('unassigned');
-          if (assignedCampaignNoteEl) {
-            assignedCampaignNoteEl.textContent = 'Ask your admin to assign a campaign.';
-          }
         }
       }
       updateCampaignControls();
@@ -1822,7 +1941,58 @@
     function triggerBookedCelebration() {
       if (!goalBookedCard) return;
       goalBookedCard.classList.add('celebrate');
+      fireConfetti();
       setTimeout(() => goalBookedCard.classList.remove('celebrate'), 700);
+    }
+
+    function ensureConfettiOverlay() {
+      let overlay = document.getElementById('confettiOverlay');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'confettiOverlay';
+        overlay.style.position = 'fixed';
+        overlay.style.inset = '0';
+        overlay.style.pointerEvents = 'none';
+        overlay.style.overflow = 'hidden';
+        overlay.style.zIndex = '9998';
+        document.body.appendChild(overlay);
+      }
+      return overlay;
+    }
+
+    function fireConfetti() {
+      const overlay = ensureConfettiOverlay();
+      const colors = ['#4df3a3', '#3da9ff', '#f97373', '#facc15', '#a855f7'];
+      const pieces = 80;
+      for (let i = 0; i < pieces; i += 1) {
+        const piece = document.createElement('span');
+        piece.className = 'confetti-piece';
+        const size = 6 + Math.random() * 4;
+        piece.style.position = 'absolute';
+        piece.style.width = `${size}px`;
+        piece.style.height = `${size * 2}px`;
+        piece.style.left = `${Math.random() * 100}%`;
+        piece.style.top = '-10%';
+        piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+        piece.style.opacity = '0.9';
+        piece.style.borderRadius = '2px';
+        const duration = 1200 + Math.random() * 600;
+        const delay = Math.random() * 200;
+        piece.style.transition = `transform ${duration}ms linear, opacity ${duration}ms linear`;
+        piece.style.transform = `translate3d(0, 0, 0) rotate(${Math.random() * 360}deg)`;
+        overlay.appendChild(piece);
+
+        setTimeout(() => {
+          piece.style.transform = `translate3d(${(Math.random() - 0.5) * 200}px, 110vh, 0) rotate(${720 + Math.random() * 720}deg)`;
+          piece.style.opacity = '0';
+        }, delay);
+
+        setTimeout(() => {
+          if (piece.parentNode === overlay) {
+            overlay.removeChild(piece);
+          }
+        }, duration + delay + 200);
+      }
     }
 
     function getDeviceLabel(kind, deviceId) {
@@ -1990,6 +2160,7 @@
           leadAttemptMetaEl.style.display = 'none';
           leadAttemptMetaEl.textContent = '';
         }
+        updateProspectTimezoneDisplay(null);
         if (pendingDialTimeoutId) {
           clearTimeout(pendingDialTimeoutId);
           pendingDialTimeoutId = null;
@@ -2015,6 +2186,7 @@
         leadAttemptMetaEl.textContent = label;
         leadAttemptMetaEl.style.display = label ? 'inline-flex' : 'none';
       }
+      updateProspectTimezoneDisplay(lead.phone || null);
       bumpCallState('Dialing');
       dispoBlockEl.style.display = 'block';
       hasPendingDispo = true;
@@ -2054,8 +2226,11 @@
           lbRankEl.textContent = 'Rank: —';
         }
 
-        lbListEl.innerHTML = (top || []).map(row => {
-          const label = row.agentId === agentId ? 'You' : `Agent ${row.agentId}`;
+        const topRows = (top || []).slice(0, 3);
+        lbListEl.innerHTML = topRows.map(row => {
+          const displayName = formatAgentIdDisplay(row.agentId);
+          const isMe = row.agentId === agentId;
+          const label = isMe ? `${displayName} (You)` : displayName;
           const rankClass = row.rank ? `rank-${Math.min(row.rank, 3)}` : '';
           return `
             <li class="leaderboard-item ${rankClass}">
