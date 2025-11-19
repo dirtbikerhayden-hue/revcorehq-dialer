@@ -1074,7 +1074,7 @@
       position: relative;
       border-radius: 999px;
       padding: 6px 10px;
-      background: radial-gradient(circle at left, rgba(56, 189, 248, 0.20), transparent 70%);
+      background: radial-gradient(circle at left, rgba(74, 222, 128, 0.20), transparent 70%);
       overflow: hidden;
     }
 
@@ -1083,12 +1083,12 @@
       position: absolute;
       inset: 0;
       border-radius: inherit;
-      border: 1px solid rgba(56, 189, 248, 0.8);
+      border: 1px solid rgba(74, 222, 128, 0.9);
       box-shadow:
-        0 0 8px rgba(45, 212, 191, 0.6),
-        0 0 16px rgba(56, 189, 248, 0.5);
+        0 0 8px rgba(74, 222, 128, 0.6),
+        0 0 18px rgba(34, 197, 94, 0.6);
       pointer-events: none;
-      animation: rankOneHalo 2.8s ease-in-out infinite;
+      animation: rankOneHalo 3s ease-in-out infinite;
     }
 
     .leaderboard-item.rank-2 {
@@ -1154,7 +1154,7 @@
       color: var(--accent);
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
       font-size: 1.05rem;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.02em;
     }
 
     .prospect-tz-helper {
@@ -1171,25 +1171,25 @@
 
     @keyframes rankOneHalo {
       0% {
-        opacity: 0.55;
-        transform: scale(1);
+        opacity: 0.4;
+        transform: scale(0.99);
         box-shadow:
-          0 0 6px rgba(45, 212, 191, 0.4),
-          0 0 12px rgba(56, 189, 248, 0.3);
+          0 0 6px rgba(74, 222, 128, 0.4),
+          0 0 10px rgba(34, 197, 94, 0.3);
       }
       50% {
         opacity: 1;
         transform: scale(1.03);
         box-shadow:
-          0 0 12px rgba(45, 212, 191, 0.8),
-          0 0 22px rgba(56, 189, 248, 0.7);
+          0 0 14px rgba(74, 222, 128, 0.9),
+          0 0 24px rgba(34, 197, 94, 0.8);
       }
       100% {
-        opacity: 0.55;
-        transform: scale(1);
+        opacity: 0.4;
+        transform: scale(0.99);
         box-shadow:
-          0 0 6px rgba(45, 212, 191, 0.4),
-          0 0 12px rgba(56, 189, 248, 0.3);
+          0 0 6px rgba(74, 222, 128, 0.4),
+          0 0 10px rgba(34, 197, 94, 0.3);
       }
     }
 
@@ -1798,12 +1798,12 @@
           const a = digits.slice(1, 4);
           const b = digits.slice(4, 7);
           const c = digits.slice(7, 11);
-          formatted = `(${a}) ${b}-${c}`;
+          formatted = `(${a})${b}-${c}`;
         } else if (digits.length === 10) {
           const a = digits.slice(0, 3);
           const b = digits.slice(3, 6);
           const c = digits.slice(6, 10);
-          formatted = `(${a}) ${b}-${c}`;
+          formatted = `(${a})${b}-${c}`;
         }
         callbackNumberDisplayEl.textContent = formatted;
       } else {
