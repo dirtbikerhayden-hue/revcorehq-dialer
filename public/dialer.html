@@ -1070,21 +1070,49 @@
     }
 
     .leaderboard-item.rank-1 {
-      background: radial-gradient(circle at left, rgba(74, 222, 128, 0.18), transparent 70%);
+      position: relative;
       border-radius: 999px;
-      padding: 6px 8px;
+      padding: 6px 10px;
+      background: radial-gradient(circle at left, rgba(74, 222, 128, 0.20), transparent 70%);
+      overflow: hidden;
+    }
+
+    .leaderboard-item.rank-1::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      border: 1px solid rgba(74, 222, 128, 0.9);
+      box-shadow: 0 0 12px rgba(74, 222, 128, 0.7);
+      pointer-events: none;
+      animation: rankOneHalo 3s ease-in-out infinite;
     }
 
     .leaderboard-item.rank-2 {
-      background: radial-gradient(circle at left, rgba(96, 165, 250, 0.14), transparent 70%);
+      position: relative;
       border-radius: 999px;
-      padding: 6px 8px;
+      padding: 6px 10px;
+      background: radial-gradient(circle at left, rgba(96, 165, 250, 0.18), transparent 70%);
+      overflow: hidden;
+    }
+
+    .leaderboard-item.rank-2::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      border: 1px solid rgba(96, 165, 250, 0.7);
+      box-shadow: 0 0 10px rgba(96, 165, 250, 0.5);
+      pointer-events: none;
+      animation: rankTwoHalo 3.4s ease-in-out infinite;
     }
 
     .leaderboard-item.rank-3 {
-      background: radial-gradient(circle at left, rgba(192, 132, 252, 0.12), transparent 70%);
-      border-radius: 999px;
-      padding: 6px 8px;
+      background: transparent;
+      border-radius: 0;
+      padding: 4px 0;
+      border: none;
+      box-shadow: none;
     }
 
     ::-webkit-scrollbar { width: 6px; }
@@ -1140,42 +1168,21 @@
       color: var(--accent);
     }
 
-    .leaderboard-item.rank-1 {
-      background: radial-gradient(circle at left, rgba(74, 222, 128, 0.24), transparent 70%);
-      border-radius: 999px;
-      padding: 6px 10px;
-      border: 1px solid rgba(74, 222, 128, 0.9);
-      box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.45);
-      animation: rankOneGlow 3.2s ease-in-out infinite;
+    @keyframes rankOneHalo {
+      0%   { opacity: 0.9; transform: scale(1); }
+      50%  { opacity: 1;   transform: scale(1.03); }
+      100% { opacity: 0.9; transform: scale(1); }
     }
 
-    .leaderboard-item.rank-2 {
-      background: radial-gradient(circle at left, rgba(96, 165, 250, 0.18), transparent 70%);
-      border-radius: 999px;
-      padding: 6px 10px;
-      border: 1px solid rgba(96, 165, 250, 0.65);
-      box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.3);
-      animation: rankTwoGlow 4s ease-in-out infinite;
+    @keyframes rankTwoHalo {
+      0%   { opacity: 0.7; transform: scale(1); }
+      50%  { opacity: 0.9; transform: scale(1.02); }
+      100% { opacity: 0.7; transform: scale(1); }
     }
 
-    .leaderboard-item.rank-3 {
-      background: transparent;
-      border-radius: 0;
-      padding: 4px 0;
-      border: none;
-      box-shadow: none;
-    }
-
-    @keyframes rankOneGlow {
-      0%   { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.45); }
-      50%  { box-shadow: 0 0 26px 0 rgba(74, 222, 128, 0.65); }
-      100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.45); }
-    }
-
-    @keyframes rankTwoGlow {
-      0%   { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.3); }
-      50%  { box-shadow: 0 0 18px 0 rgba(96, 165, 250, 0.5); }
-      100% { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.3); }
+    .lb-booked {
+      color: #4df3a3;
+      font-weight: 600;
     }
   </style>
 
@@ -2236,7 +2243,7 @@
             <li class="leaderboard-item ${rankClass}">
               <div class="leaderboard-left">
                 <strong>${label}</strong><br/>
-                <span>${row.conversions || 0} booked • ${row.live || 0} live</span>
+                <span><span class="lb-booked">${row.conversions || 0} booked</span> • ${row.live || 0} live</span>
               </div>
               <div class="leaderboard-right">#${row.rank || '—'}</div>
             </li>
