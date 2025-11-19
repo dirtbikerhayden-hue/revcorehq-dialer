@@ -512,6 +512,13 @@ function isWithinWeeklyReportWindow(easternDate) {
   return false;
 }
 
+// For "Today's Numbers" on the dialer UI, we treat a "day"
+// as running from 5:00am–4:59am Eastern.
+function getDialerDayId(easternDate) {
+  const shifted = new Date(easternDate.getTime() - 5 * 60 * 60 * 1000);
+  return getDateId(shifted);
+}
+
 function loadReportMetrics() {
   try {
     if (!fs.existsSync(REPORT_METRICS_FILE)) {
@@ -2449,7 +2456,7 @@ app.get('/api/campaigns', (req, res) => {
 
 app.get('/api/metrics/:agentId', (req, res) => {
   const { agentId } = req.params;
-  ensureLeaderboardWeek();
+  const easternNow = ensureLeaderboardWeek();
   const metrics = ensureAgentMetrics(agentId);
   const status = getAgentStatus(agentId);
   let statusDurationSec = null;
@@ -2458,12 +2465,27 @@ app.get('/api/metrics/:agentId', (req, res) => {
   } else if (metrics.lastActivityMs) {
     statusDurationSec = Math.floor((Date.now() - metrics.lastActivityMs) / 1000);
   }
+  const dialerDayId = getDialerDayId(easternNow);
+  const dailyAgent = (dailyAgentReport[dialerDayId] && dailyAgentReport[dialerDayId][agentId])
+    ? dailyAgentReport[dialerDayId][agentId]
+    : null;
+
+  let todayAnsweredHuman = 0;
+  let todayConversions = 0;
+  if (dailyAgent) {
+    todayAnsweredHuman = dailyAgent.liveConnects || 0;
+    const dispositions = dailyAgent.dispositions || {};
+    todayConversions = dispositions.booked || 0;
+  }
+
   res.json({
     agentId,
     metrics: {
       ...metrics,
       status,
-      statusDurationSec
+      statusDurationSec,
+      todayAnsweredHuman,
+      todayConversions
     }
   });
 });

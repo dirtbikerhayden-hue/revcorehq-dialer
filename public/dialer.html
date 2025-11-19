@@ -244,6 +244,7 @@
       align-items: center;
       gap: 7px;
       background: radial-gradient(circle at 0% 0%, rgba(77, 243, 163, 0.25), rgba(15, 23, 42, 0.95));
+      margin-top: 6px;
     }
 
     .agent-pill-dot {
@@ -1048,7 +1049,7 @@
       display: flex;
       justify-content: space-between;
       gap: 8px;
-      padding: 4px 0;
+      padding: 6px 10px;
       border-bottom: 1px dashed rgba(31, 41, 55, 0.8);
     }
 
@@ -1080,19 +1081,32 @@
     .leaderboard-item.rank-1::before {
       content: "";
       position: absolute;
-      inset: 0;
+      inset: -1px;
       border-radius: inherit;
-      border: 1px solid rgba(74, 222, 128, 0.9);
-      box-shadow: 0 0 12px rgba(74, 222, 128, 0.7);
+      padding: 1px;
+      background: conic-gradient(
+        from 0deg,
+        rgba(74, 222, 128, 0.2),
+        rgba(74, 222, 128, 0.7),
+        rgba(74, 222, 128, 0.2),
+        rgba(34, 197, 94, 0.6),
+        rgba(74, 222, 128, 0.2)
+      );
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
       pointer-events: none;
-      animation: rankOneHalo 3s ease-in-out infinite;
+      opacity: 0.9;
+      animation: rankOneHalo 6s linear infinite;
     }
 
     .leaderboard-item.rank-2 {
       position: relative;
       border-radius: 999px;
       padding: 6px 10px;
-      background: radial-gradient(circle at left, rgba(96, 165, 250, 0.18), transparent 70%);
+      background: radial-gradient(circle at left, rgba(96, 165, 250, 0.12), transparent 70%);
       overflow: hidden;
     }
 
@@ -1101,17 +1115,15 @@
       position: absolute;
       inset: 0;
       border-radius: inherit;
-      border: 1px solid rgba(96, 165, 250, 0.7);
-      box-shadow: 0 0 10px rgba(96, 165, 250, 0.5);
+      border: 1px solid rgba(96, 165, 250, 0.45);
+      box-shadow: 0 0 8px rgba(96, 165, 250, 0.3);
       pointer-events: none;
-      animation: rankTwoHalo 3.4s ease-in-out infinite;
+      animation: rankTwoHalo 4.5s ease-in-out infinite;
     }
 
     .leaderboard-item.rank-3 {
       background: transparent;
       border-radius: 0;
-      padding: 4px 0;
-      border: none;
       box-shadow: none;
     }
 
@@ -1169,15 +1181,14 @@
     }
 
     @keyframes rankOneHalo {
-      0%   { opacity: 0.9; transform: scale(1); }
-      50%  { opacity: 1;   transform: scale(1.03); }
-      100% { opacity: 0.9; transform: scale(1); }
+      0%   { transform: rotate(0deg);   opacity: 0.9; }
+      100% { transform: rotate(360deg); opacity: 0.9; }
     }
 
     @keyframes rankTwoHalo {
-      0%   { opacity: 0.7; transform: scale(1); }
-      50%  { opacity: 0.9; transform: scale(1.02); }
-      100% { opacity: 0.7; transform: scale(1); }
+      0%   { opacity: 0.35; transform: scale(1); }
+      50%  { opacity: 0.65; transform: scale(1.01); }
+      100% { opacity: 0.35; transform: scale(1); }
     }
 
     .lb-booked {
@@ -1205,7 +1216,7 @@
       <div class="card-inner">
         <div class="header-row">
           <div class="title-block">
-            <h1>REHASH DIALER • REVCORE</h1>
+            <h1>RevCore Dialer</h1>
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
             <div class="clock-display">
@@ -1454,8 +1465,8 @@
       </div>
       <iframe src="https://api.leadconnectorhq.com/widget/booking/NV47jMb2Se8WlgRuKuA5" class="calendar-frame" scrolling="no" id="NV47jMb2Se8WlgRuKuA5_1763294635003"></iframe>
       <script src="https://link.msgsndr.com/js/form_embed.js" type="text/javascript"></script>
-      <p style="margin: 10px 0 0; color: var(--text-subtle); font-size: 0.85rem; text-align:center;">
-        Please verify that the selected time zone reflects the prospect’s state prior to scheduling.
+      <p style="margin: 10px 0 0; color: #facc15; font-size: 0.85rem; text-align:center;">
+        Please verify time zone with each prospect prior to scheduling.
       </p>
     </div>
     </div>
@@ -1794,7 +1805,9 @@
     }
 
     function setAgentLabel(label) {
-      agentLabelEl.textContent = `Agent • ${label}`;
+      if (!agentLabelEl) return;
+      const display = formatAgentIdDisplay(label || '');
+      agentLabelEl.textContent = display || '';
     }
 
     function setAssignedCampaign(id, name) {
@@ -2213,7 +2226,17 @@
         if (lastDurationEl) {
           lastDurationEl.textContent = formatDuration(m.lastCallDurationSec || 0);
         }
-        updateGoals(m.answeredHuman || 0, m.conversions || 0);
+        const liveForGoals = (
+          typeof m.todayAnsweredHuman === 'number'
+            ? m.todayAnsweredHuman
+            : (m.answeredHuman || 0)
+        );
+        const bookedForGoals = (
+          typeof m.todayConversions === 'number'
+            ? m.todayConversions
+            : (m.conversions || 0)
+        );
+        updateGoals(liveForGoals, bookedForGoals);
         updateAgentStatus(m.status, m.statusDurationSec);
       } catch (e) {
         console.error('metrics error', e);
@@ -2979,7 +3002,10 @@
     function _rehashUpdateAgentBadge(agentName) {
       const badge = document.querySelector('[data-agent-badge], .agent-badge, .agent-tag, #agentLabel');
       if (badge) {
-        badge.textContent = `Agent • ${agentName}`;
+        const display = (typeof formatAgentIdDisplay === 'function')
+          ? formatAgentIdDisplay(agentName || '')
+          : (agentName || '');
+        badge.textContent = display;
       }
     }
 
