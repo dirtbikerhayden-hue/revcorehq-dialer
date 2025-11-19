@@ -1448,6 +1448,7 @@
     let pendingManualPhone = null;
     let pendingIncomingCall = null;
     let keypadModal = null;
+    let pendingDialTimeoutId = null;
 
     function showIncomingModal() {
       if (incomingModal) {
@@ -1989,6 +1990,10 @@
           leadAttemptMetaEl.style.display = 'none';
           leadAttemptMetaEl.textContent = '';
         }
+        if (pendingDialTimeoutId) {
+          clearTimeout(pendingDialTimeoutId);
+          pendingDialTimeoutId = null;
+        }
         return;
       }
       currentLeadBlockEl.style.opacity = 1;
@@ -2130,6 +2135,23 @@
         fetchMetrics();
         fetchLeaderboard();
 
+        // Safety: if the softphone never connects this call to the browser,
+        // auto-mark it as a failed attempt after a short timeout so the agent
+        // isn't stuck on a silent screen.
+        if (pendingDialTimeoutId) {
+          clearTimeout(pendingDialTimeoutId);
+          pendingDialTimeoutId = null;
+        }
+        pendingDialTimeoutId = setTimeout(() => {
+          // If we already moved on or a connection exists, do nothing.
+          if (!currentLead || activeConnection) return;
+          console.warn('[Dialer] Softphone did not connect in time; auto-marking bad number.');
+          statusTextEl.innerHTML =
+            'No ringback / audio detected. Auto-tagging this lead as ' +
+            '<span>Bad Number</span> and moving to the next lead.';
+          sendDisposition('bad_number', true);
+        }, 5000);
+
       } catch (e) {
         console.error('dial error', e);
         statusTextEl.textContent = 'Error starting call.';
@@ -2137,20 +2159,24 @@
       }
     }
 
-   async function sendDisposition(outcome) {
+   async function sendDisposition(outcome, isAuto = false) {
      if (!agentId) {
        statusTextEl.textContent = 'No agent ID — please re-login.';
        return;
      }
      if (!currentLead || !hasPendingDispo) return;
 
-     const notes      = notesEl.value || '';
+     const notes      = isAuto
+       ? '[AUTO] No softphone connection / timeout'
+       : (notesEl.value || '');
      const leadPhone  = currentLead.phone;
      const leadName   = currentLead.name || '';
      const campaignId = currentCampaignId || assignedCampaignId;
 
      const friendlyLabel = DISPOSITION_LABELS[outcome] || outcome;
-     statusTextEl.textContent = `Saving disposition: ${friendlyLabel}…`;
+     statusTextEl.textContent = isAuto
+       ? `Saving auto-disposition: ${friendlyLabel}…`
+       : `Saving disposition: ${friendlyLabel}…`;
 
      try {
        await fetch('/api/disposition', {
@@ -2168,8 +2194,14 @@
 
        hasPendingDispo = false;
        bumpCallState('');
-       statusTextEl.textContent = `Disposition recorded: ${friendlyLabel}.`;
-       pushLog(`${friendlyLabel} • ${leadName} • ${leadPhone}`, friendlyLabel, 'final');
+       statusTextEl.textContent = isAuto
+         ? `Auto-disposition recorded: ${friendlyLabel}.`
+         : `Disposition recorded: ${friendlyLabel}.`;
+       pushLog(
+         `${friendlyLabel} • ${leadName} • ${leadPhone}${isAuto ? ' • [AUTO]' : ''}`,
+         friendlyLabel,
+         'final'
+       );
        if (outcome === 'booked') {
          triggerBookedCelebration();
        }
@@ -2502,6 +2534,10 @@
     function handleCallWrapUp(label) {
       if (label) {
         console.log('[Dialer] Call finished:', label);
+      }
+      if (pendingDialTimeoutId) {
+        clearTimeout(pendingDialTimeoutId);
+        pendingDialTimeoutId = null;
       }
       activeConnection = null;
       setMuteState(false);
