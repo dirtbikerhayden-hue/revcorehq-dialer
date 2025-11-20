@@ -1136,6 +1136,41 @@
           <div id="localUploadStatus" class="status-text"></div>
         </div>
 
+        <!-- SCRIPTS -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Call Scripts</div>
+              <div class="card-subtitle">
+                Manage the script shown in the dialer. Leave ID empty to edit the default script.
+              </div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div>
+              <label for="scriptIdInput">Script ID (optional)</label>
+              <input id="scriptIdInput" placeholder="default or campaign id" />
+              <div class="field-note">Use a campaign id to override per campaign, or leave blank for the default script.</div>
+            </div>
+            <div>
+              <label for="scriptTitleInput">Title</label>
+              <input id="scriptTitleInput" placeholder="Call Script" />
+            </div>
+          </div>
+          <div class="field-row">
+            <div style="width:100%;">
+              <label for="scriptJsonInput">Sections JSON</label>
+              <textarea id="scriptJsonInput" rows="6" placeholder='[{"heading":"Section 1","body":"Line 1\nLine 2"}]'></textarea>
+              <div class="field-note">Provide an array of sections. Each section needs a "heading" and "body".</div>
+            </div>
+          </div>
+          <div style="margin-bottom:8px;">
+            <button class="btn btn-primary" id="scriptSaveBtn" type="button">Save Script</button>
+            <button class="btn btn-secondary" id="scriptLoadDefaultBtn" type="button">Load Default</button>
+          </div>
+          <div id="scriptStatus" class="status-text"></div>
+        </div>
+
         <!-- SETTINGS -->
         <div class="card hidden" id="settingsCard">
           <div class="card-header">
@@ -1284,6 +1319,12 @@
     const addLpBtn = document.getElementById('addLpBtn');
     const clearLpBtn = document.getElementById('clearLpBtn');
     const lpTableBody = document.getElementById('lpTableBody');
+    const scriptIdInput = document.getElementById('scriptIdInput');
+    const scriptTitleInput = document.getElementById('scriptTitleInput');
+    const scriptJsonInput = document.getElementById('scriptJsonInput');
+    const scriptSaveBtn = document.getElementById('scriptSaveBtn');
+    const scriptLoadDefaultBtn = document.getElementById('scriptLoadDefaultBtn');
+    const scriptStatus = document.getElementById('scriptStatus');
 
     const metricOnlineAgents = document.getElementById('metricOnlineAgents');
     const metricTotalAgents = document.getElementById('metricTotalAgents');
@@ -1342,6 +1383,34 @@
       el.classList.add(ok ? 'status-ok' : 'status-err');
     }
 
+    function getScriptKeyFromInput() {
+      const raw = (scriptIdInput?.value || '').trim();
+      return raw || 'default';
+    }
+
+    async function loadScriptForEditor(useDefault = false) {
+      if (!scriptJsonInput || !scriptTitleInput) return;
+      try {
+        const res = await adminFetch('/api/admin/scripts');
+        if (!res.ok) {
+          setStatus(scriptStatus, res.error || 'Unable to load scripts', false);
+          return;
+        }
+        const scripts = res.scripts || {};
+        const key = useDefault ? 'default' : getScriptKeyFromInput();
+        const script = scripts[key] || scripts.default || { title: 'Call Script', sections: [] };
+        if (!useDefault) {
+          scriptIdInput.value = key;
+        }
+        scriptTitleInput.value = script.title || 'Call Script';
+        scriptJsonInput.value = JSON.stringify(script.sections || [], null, 2);
+        setStatus(scriptStatus, `Loaded script "${key}"`, true);
+      } catch (err) {
+        console.error('load script error', err);
+        setStatus(scriptStatus, 'Unable to load scripts', false);
+      }
+    }
+
     async function adminFetch(path, options = {}) {
       const res = await fetch(path, {
         ...options,
@@ -1358,7 +1427,41 @@
         data = {};
       }
       const ok = res.ok && data.ok !== false;
-      return { ok, data };
+      return { ok, ...data };
+    }
+
+    async function saveScriptFromEditor() {
+      if (!scriptJsonInput || !scriptTitleInput) return;
+      let sections;
+      try {
+        sections = JSON.parse(scriptJsonInput.value || '[]');
+        if (!Array.isArray(sections)) {
+          throw new Error('Sections JSON must be an array');
+        }
+      } catch (err) {
+        console.error('parse script sections error', err);
+        setStatus(scriptStatus, 'Invalid Sections JSON. Must be an array.', false);
+        return;
+      }
+      const payload = {
+        id: getScriptKeyFromInput(),
+        title: (scriptTitleInput.value || 'Call Script').trim(),
+        sections
+      };
+      try {
+        const res = await adminFetch('/api/admin/scripts', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          setStatus(scriptStatus, res.error || 'Failed to save script', false);
+          return;
+        }
+        setStatus(scriptStatus, 'Script saved.', true);
+      } catch (err) {
+        console.error('save script error', err);
+        setStatus(scriptStatus, 'Failed to save script', false);
+      }
     }
 
     function formatDuration(seconds) {
@@ -1379,6 +1482,18 @@
       const minutes = Math.floor((s % 3600) / 60);
       if (!minutes) return `${hours}h`;
       return `${hours}h ${minutes}m`;
+    }
+
+    if (scriptSaveBtn) {
+      scriptSaveBtn.addEventListener('click', () => {
+        saveScriptFromEditor();
+      });
+    }
+
+    if (scriptLoadDefaultBtn) {
+      scriptLoadDefaultBtn.addEventListener('click', () => {
+        loadScriptForEditor(true);
+      });
     }
 
     function statusBadge(statusInfo) {

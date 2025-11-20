@@ -1420,78 +1420,17 @@
       <section class="card script-card">
         <div class="card-inner">
           <div class="script-block" id="scriptBlock">
-          <div class="script-header">
-            <div class="script-title">Call Script</div>
-            <button class="collapsible-pill script-pill" id="scriptToggle" type="button" aria-expanded="false">
-              <span>Open Script</span>
-              <span class="pill-chevron" aria-hidden="true">&#9662;</span>
-            </button>
-          </div>
-          <div class="script-content" id="scriptContent">
-            <div class="script-section">
-              <div class="script-heading">1. Opener – Confused Old-Man Tone</div>
-              <div class="script-body">
-                <p>“…yeah…<br>is this {Name}?<br>Oh hey, {Name}, it’s just Hayden…<br>I was wondering if you could possibly… help me out for a moment?”</p>
-                <p>What they say:<br>“Sure, how can I help you?” / “Who is this?” / “What’s this about?”</p>
-              </div>
+            <div class="script-header">
+              <div class="script-title" id="scriptTitle">Call Script</div>
+              <button class="collapsible-pill script-pill" id="scriptToggle" type="button" aria-expanded="false">
+                <span>Open Script</span>
+                <span class="pill-chevron" aria-hidden="true">&#9662;</span>
+              </button>
             </div>
-            <div class="script-section">
-              <div class="script-heading">2. Responsibility Pattern Interrupt</div>
-              <div class="script-body">
-                <p>“Well… and I’m not quite sure if you’re the right person I should be talking to…<br>but I called to see who would be responsible on your end for looking at any possible hidden gaps in your older leads and unsold estimates…<br>that could be causing you guys to miss out on jobs you already quoted…”</p>
-                <p>Pause, then:<br>“…who should I be talking to about that?”</p>
-              </div>
-            </div>
-            <div class="script-section">
-              <div class="script-heading">3. Gatekeeper Responses</div>
-              <div class="script-body">
-                <p>If they say “What do you mean hidden gaps?”<br>“Yeah, I’m just referring to any possible gaps in the follow-up rhythm…<br>that could be causing some of those estimates to go cold even though they were good jobs.”<br>Then: “Who would usually handle that over there?”</p>
-                <p>If they say “That’d be {Owner/Manager}.”<br>“Got it…<br>should I have you transfer me over to them…<br>just to leave a quick voicemail and they can call me back if they need help with that?”</p>
-                <p>If they ask “Do you have an appointment?”<br>“Ah… I don’t think so…<br>I was just trying to reach whoever’s responsible for those older leads so I know who to talk to.”</p>
-              </div>
-            </div>
-            <div class="script-section">
-              <div class="script-heading">4. If You Reach the Decision-Maker</div>
-              <div class="script-body">
-                <p>“Yeah, so I wasn’t even sure if it really makes sense for us to talk yet…<br>but I called to see who’s responsible for identifying any possible hidden gaps in your old leads and past estimates…<br>that could be causing you guys to lose out on work you’ve already quoted.”</p>
-                <p>Pause. Let them respond.</p>
-              </div>
-            </div>
-            <div class="script-section">
-              <div class="script-heading">5. Once They Lean In (Curiosity Triggered)</div>
-              <div class="script-body">
-                <p>If they say “What do you mean by hidden gaps?” or “Yeah that might be me, what’s going on?”<br>“Yeah… not saying you guys have anything wrong…<br>just that a lot of contractors notice they’ve got some older estimates that never got followed up on…<br>and that can lead to a few jobs slipping through the cracks.”<br>Then: “Would you be opposed to a brief conversation… maybe 10–15 minutes… just to see if anything could be tightened up?”</p>
-              </div>
-            </div>
-            <div class="script-section">
-              <div class="script-heading">6. If They Push Back</div>
-              <div class="script-body">
-                <p>“Totally fair…<br>and I’m not even sure if it makes sense for us to talk long-term…<br>but most contractors we speak with end up finding something in the older leads they didn’t realize was there.”<br>Then: “Would you be opposed to a quick look at it?”</p>
-              </div>
-            </div>
-            <div class="script-section">
-              <div class="script-heading">7. If They Still Resist</div>
-              <div class="script-body">
-                <p>“Yeah, I get that…<br>who would be the best person to loop in if you ever wanted to take a look at those older estimates again?”</p>
-              </div>
-            </div>
-            <div class="script-section">
-              <div class="script-heading">Voicemail – Version 1</div>
-              <div class="script-body">
-                <p>“Hey [Name]… this is [Your Name] with Rehash Engine.<br>I’m looking over some of your older leads and past estimates…<br>and I had a quick question on those…<br>and I was wondering if you could help me out for a moment.</p>
-                <p>I’m going to be available for a little bit today…<br>you can reach me at [your number].<br>And if you don’t catch me, just leave a message<br>and I’ll call you back as soon as I’m free.<br>Talk to you then.”</p>
-              </div>
-            </div>
-            <div class="script-section">
-              <div class="script-heading">Voicemail – Version 2</div>
-              <div class="script-body">
-                <p>“Hey [Name]… yeah… it’s just [Your Name] with Rehash Engine.<br>Looks like you had responded to something online…<br>I think it was yesterday morning…<br>about getting a little outside help with tightening up your older leads<br>and the past estimates you guys already quoted.</p>
-                <p>I just had time to get back to you…<br>to see if I could actually help with that.</p>
-                <p>I should be available here for a little bit today…<br>you can reach me at [your number].<br>And if you don’t get me, just leave a quick message…<br>or you’re welcome to text that number too…<br>and I’ll text you a time that I can call you back. Talk to you then.”</p>
-              </div>
+            <div class="script-content" id="scriptContent">
+              <!-- Script sections will be injected here from the server -->
             </div>
           </div>
-        </div>
       </div>
     </section>
 
@@ -1656,6 +1595,7 @@
     const scriptBlockEl       = document.getElementById('scriptBlock');
     const scriptToggleEl      = document.getElementById('scriptToggle');
     const scriptContentEl     = document.getElementById('scriptContent');
+    const scriptTitleEl       = document.getElementById('scriptTitle');
     const audioCardEl         = document.getElementById('audioCard');
     const audioToggleEl       = document.getElementById('audioToggle');
     const audioContentEl      = document.getElementById('audioContent');
@@ -1722,6 +1662,32 @@
         return `(${a})${b}-${c}`;
       }
       return raw;
+    }
+
+    async function loadScriptForCurrentCampaign() {
+      if (!scriptContentEl || !scriptTitleEl) return;
+      try {
+        const params = assignedCampaignId ? `?campaignId=${encodeURIComponent(assignedCampaignId)}` : '';
+        const res = await fetch(`/api/scripts/current${params}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const script = data.script || {};
+        const title = script.title || 'Call Script';
+        const sections = Array.isArray(script.sections) ? script.sections : [];
+        scriptTitleEl.textContent = title;
+        scriptContentEl.innerHTML = sections.map((s, idx) => {
+          const heading = s.heading || `Section ${idx + 1}`;
+          const body = (s.body || '').replace(/\n/g, '<br>');
+          return `
+            <div class="script-section">
+              <div class="script-heading">${heading}</div>
+              <div class="script-body">${body}</div>
+            </div>
+          `;
+        }).join('');
+      } catch (e) {
+        console.error('script load error', e);
+      }
     }
 
     function extractAreaCodeFromPhone(phone) {
@@ -1871,6 +1837,7 @@
         }
       }
       updateCampaignControls();
+      loadScriptForCurrentCampaign();
       if (assignedCampaignId && statusTextEl) {
         statusTextEl.textContent = `Campaign locked: ${assignedCampaignName || assignedCampaignId}. Hit Start Session to begin dialing.`;
       }

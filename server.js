@@ -92,6 +92,7 @@ const LOCAL_PRESENCE_FILE = path.join(DATA_DIR, 'local-presence.json');
 const REPORT_METRICS_FILE = path.join(DATA_DIR, 'report-metrics.json');
 const RECENT_DIAL_FILE = path.join(DATA_DIR, 'recent-dials.json');
 const AGENT_METRICS_FILE = path.join(DATA_DIR, 'agent-metrics.json');
+const SCRIPTS_FILE = path.join(DATA_DIR, 'scripts.json');
 // High-priority inbound agents can be set later via config; default empty.
 const PRIORITY_INBOUND_AGENTS = [];
 
@@ -144,6 +145,32 @@ function hasAfterHoursOverride(agentId) {
 }
 
 let users = loadUsers();
+
+function loadScriptsStore() {
+  try {
+    if (!fs.existsSync(SCRIPTS_FILE)) {
+      const initial = { default: { title: 'Call Script', sections: [] } };
+      fs.writeFileSync(SCRIPTS_FILE, JSON.stringify(initial, null, 2));
+      return initial;
+    }
+    const raw = fs.readFileSync(SCRIPTS_FILE, 'utf8');
+    const parsed = JSON.parse(raw) || {};
+    return parsed;
+  } catch (err) {
+    console.error('Error loading scripts.json:', err);
+    return { default: { title: 'Call Script', sections: [] } };
+  }
+}
+
+function saveScriptsStore() {
+  try {
+    fs.writeFileSync(SCRIPTS_FILE, JSON.stringify(scriptsStore, null, 2));
+  } catch (err) {
+    console.error('Error saving scripts.json:', err);
+  }
+}
+
+let scriptsStore = loadScriptsStore();
 
 function normalizePhone(num) {
   if (!num) return '';
@@ -2546,6 +2573,43 @@ app.get('/api/metrics/:agentId', (req, res) => {
       todayConversions
     }
   });
+});
+
+// ============ SCRIPT MANAGEMENT ============
+
+app.get('/api/admin/scripts', (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  res.json({ ok: true, scripts: scriptsStore });
+});
+
+app.post('/api/admin/scripts', express.json({ limit: '1mb' }), (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+  const { id, title, sections } = req.body || {};
+  const key = (id || 'default').toString().trim() || 'default';
+  const safeTitle = (title || 'Call Script').toString().trim() || 'Call Script';
+  const safeSections = Array.isArray(sections) ? sections.map(s => ({
+    heading: (s.heading || '').toString(),
+    body: (s.body || '').toString()
+  })) : [];
+
+  scriptsStore[key] = { title: safeTitle, sections: safeSections };
+  saveScriptsStore();
+
+  res.json({ ok: true, script: scriptsStore[key] });
+});
+
+app.get('/api/scripts/current', (req, res) => {
+  const { campaignId } = req.query || {};
+  let scriptKey = 'default';
+  if (campaignId && scriptsStore[campaignId]) {
+    scriptKey = campaignId;
+  }
+  const script = scriptsStore[scriptKey] || scriptsStore.default || { title: 'Call Script', sections: [] };
+  res.json({ ok: true, scriptKey, script });
 });
 
 app.get('/api/incoming-lookup', async (req, res) => {

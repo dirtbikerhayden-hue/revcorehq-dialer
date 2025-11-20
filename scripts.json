@@ -1,0 +1,16 @@
+{
+  "default": {
+    "title": "Call Script",
+    "sections": [
+      {
+        "heading": "1. Opener – Confused Old-Man Tone",
+        "body": "…yeah…\nis this {Name}?\nOh hey, {Name}, it’s just Hayden…\nI was wondering if you could possibly… help me out for a moment?\n\nWhat they say:\n“Sure, how can I help you?” / “Who is this?” / “What’s this about?”"
+      },
+      {
+        "heading": "2. Responsibility Pattern Interrupt",
+        "body": "Well… and I’m not quite sure if you’re the right person I should be talking to…\nbut I called to see who would be responsible on your end for looking at any possible hidden gaps in your older leads and unsold estimates…\nthat could be causing you guys to miss out on jobs you already quoted…\n\nPause, then:\n…who should I be talking to about that?"
+      }
+    ]
+  }
+}
+
