@@ -391,6 +391,7 @@ const NON_PICKUP_OUTCOMES = [
   'failed',
   'machine',
   'machine_voicemail',
+  'left_voicemail',
   'callback_requested'
 ];
 const MAX_NON_PICKUP_ATTEMPTS = 3;
@@ -416,6 +417,7 @@ const OUTCOME_LABELS = {
   callback_requested: 'Callback Requested',
   wrong_contact: 'Wrong Contact',
   machine: 'Machine',
+  left_voicemail: 'Left Voicemail',
   machine_voicemail: 'Machine / Voicemail',
   bad_number: 'Bad Number',
   send_info_email: 'Send Info via Email',
@@ -3177,6 +3179,7 @@ app.post('/api/disposition', async (req, res) => {
     general_email_info: 'answeredHuman',
     manual_email_info: 'answeredHuman',
     machine: 'answeredMachine',
+    left_voicemail: 'answeredMachine',
     machine_voicemail: 'answeredMachine',
     no_answer: 'noAnswer',
     busy: 'busy',
