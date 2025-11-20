@@ -2891,6 +2891,15 @@ app.all('/twilio/status', (req, res) => {
   const { agentId } = callInfo;
   const m = ensureAgentMetrics(agentId);
 
+  const durationSec = parseInt(CallDuration, 10);
+  const hasDuration = !Number.isNaN(durationSec) && durationSec >= 0;
+  const LIVE_MIN_DURATION_SEC = 15;
+  const isHumanLive =
+    CallStatus === 'completed' &&
+    AnsweredBy === 'human' &&
+    hasDuration &&
+    durationSec >= LIVE_MIN_DURATION_SEC;
+
   if (isWithinWeeklyWindow(easternNow)) {
     if (CallStatus === 'in-progress' || CallStatus === 'answered') {
       if (!m.currentCallStartMs) {
@@ -2899,10 +2908,9 @@ app.all('/twilio/status', (req, res) => {
     }
 
     if (CallStatus === 'completed') {
-      if (AnsweredBy === 'human') m.answeredHuman += 1;
+      if (isHumanLive) m.answeredHuman += 1;
       if (AnsweredBy === 'machine') m.answeredMachine += 1;
-      const durationSec = parseInt(CallDuration, 10);
-      if (!Number.isNaN(durationSec) && durationSec >= 0) {
+      if (hasDuration) {
         m.totalTalkTimeSec += durationSec;
         m.lastCallDurationSec = durationSec;
         m.completedCallCount += 1;
@@ -2923,9 +2931,21 @@ app.all('/twilio/status', (req, res) => {
     saveAgentMetricsStore();
   }
 
+  // For outbound and manual calls, count a "live conversation" once per
+  // completed human call that meets the duration threshold.
+  if (
+    isHumanLive &&
+    isWithinDailyReportWindow(easternNow) &&
+    isWithinWeeklyReportWindow(easternNow)
+  ) {
+    const reportDateId = getDateId(easternNow);
+    const dailyAgent = ensureDailyAgentMetric(reportDateId, agentId);
+    dailyAgent.liveConnects += 1;
+    saveReportMetrics();
+  }
+
   // Auto-mark hard failures with 0s duration as bad numbers so they are skipped in future
   if (CallStatus === 'failed') {
-    const durationSec = parseInt(CallDuration, 10);
     const isZeroDuration = !CallDuration || Number.isNaN(durationSec) || durationSec === 0;
     if (isZeroDuration) {
       const lead = callInfo.lead || {};
@@ -3045,7 +3065,7 @@ app.post('/api/disposition', async (req, res) => {
 
   const m = ensureAgentMetrics(agentId);
   const metricOutcomeMap = {
-    connected: 'answeredHuman',
+    connected: null,
     booked: 'answeredHuman',
     not_interested: 'answeredHuman',
     callback_requested: 'answeredHuman',
@@ -3079,9 +3099,6 @@ app.post('/api/disposition', async (req, res) => {
   if (isWithinDailyReportWindow(easternNow) && isWithinWeeklyReportWindow(easternNow)) {
     const dailyAgent = ensureDailyAgentMetric(reportDateId, agentId);
     dailyAgent.dispositions[safeOutcome] = (dailyAgent.dispositions[safeOutcome] || 0) + 1;
-    if (metricKey === 'answeredHuman') {
-      dailyAgent.liveConnects += 1;
-    }
     if (campaignId) {
       const dailyCampaign = ensureDailyCampaignMetric(reportDateId, String(campaignId));
       dailyCampaign.dispositions[safeOutcome] = (dailyCampaign.dispositions[safeOutcome] || 0) + 1;
