@@ -488,6 +488,52 @@
 
     .current-lead-main strong { font-size: 0.96rem; }
 
+    .current-lead-email-row {
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      color: var(--text-subtle);
+    }
+
+    .current-lead-email-row label {
+      opacity: 0.9;
+    }
+
+    .current-lead-email-input {
+      flex: 1;
+      min-width: 0;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(55, 65, 81, 0.9);
+      background: rgba(15, 23, 42, 0.96);
+      color: var(--text-main);
+      font-size: 0.8rem;
+    }
+
+    .current-lead-email-input:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    .btn-email-save {
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      background: transparent;
+      color: var(--text-subtle);
+      font-size: 0.72rem;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .btn-email-save:hover {
+      background: rgba(37, 99, 235, 0.24);
+      border-color: rgba(59, 130, 246, 0.9);
+      color: #dbeafe;
+    }
+
     .current-lead-meta {
       display: flex;
       flex-wrap: wrap;
@@ -1257,6 +1303,11 @@
             <div>
               <strong id="leadName">No active call</strong><br/>
               <span id="leadPhone" style="color: var(--text-subtle);"></span>
+              <div class="current-lead-email-row">
+                <label for="leadEmailInput">Email:</label>
+                <input id="leadEmailInput" class="current-lead-email-input" type="email" placeholder="No email on file" disabled />
+                <button type="button" id="leadEmailSaveBtn" class="btn-email-save" disabled>Save</button>
+              </div>
             </div>
             <div class="badge-live" id="callStateChip" style="display:none;">Dialing</div>
           </div>
@@ -1274,9 +1325,9 @@
           <div class="dispo-buttons">
             <button class="btn-dispo" data-dispo="not_interested">Not Interested</button>
             <button class="btn-dispo" data-dispo="callback_requested">Callback Requested</button>
-            <button class="btn-dispo" data-dispo="gatekeeper_transfer">Gatekeeper – Warm Transfer</button>
             <button class="btn-dispo" data-dispo="wrong_contact">Wrong Contact</button>
-            <button class="btn-dispo" data-dispo="send_info_email">Send Info via Email</button>
+            <button class="btn-dispo" data-dispo="general_email_info">General Email Info</button>
+            <button class="btn-dispo" data-dispo="manual_email_info">Manual Email Info</button>
             <button class="btn-dispo" data-dispo="machine_voicemail">Machine / Voicemail</button>
             <button class="btn-dispo" data-dispo="bad_number">Bad Number</button>
             <button class="btn-dispo booked" data-dispo="booked">BOOKED Demo</button>
@@ -1571,6 +1622,8 @@
     const sessionChipEl       = document.getElementById('sessionChip');
     const leadNameEl          = document.getElementById('leadName');
     const leadPhoneEl         = document.getElementById('leadPhone');
+    const leadEmailInputEl    = document.getElementById('leadEmailInput');
+    const leadEmailSaveBtnEl  = document.getElementById('leadEmailSaveBtn');
     const leadCampaignTagEl   = document.getElementById('leadCampaignTag');
     const currentLeadBlockEl  = document.getElementById('currentLeadBlock');
     const callStateChipEl     = document.getElementById('callStateChip');
@@ -1630,6 +1683,8 @@
       wrong_contact: 'Wrong Contact',
       machine_voicemail: 'Machine / Voicemail',
       bad_number: 'Bad Number',
+      general_email_info: 'General Email Info',
+      manual_email_info: 'Manual Email Info',
       booked: 'Booked Demo'
     };
 
@@ -2162,6 +2217,14 @@
         leadNameEl.textContent = 'No active call';
         leadPhoneEl.textContent = '';
         leadCampaignTagEl.textContent = 'Campaign: —';
+        if (leadEmailInputEl) {
+          leadEmailInputEl.value = '';
+          leadEmailInputEl.placeholder = 'No email on file';
+          leadEmailInputEl.disabled = true;
+        }
+        if (leadEmailSaveBtnEl) {
+          leadEmailSaveBtnEl.disabled = true;
+        }
         currentLeadBlockEl.style.opacity = 0.7;
         bumpCallState('');
         dispoBlockEl.style.display = 'none';
@@ -2182,6 +2245,15 @@
       currentLeadBlockEl.style.opacity = 1;
       leadNameEl.textContent = lead.name || 'Lead';
       leadPhoneEl.textContent = lead.phone || '';
+      if (leadEmailInputEl) {
+        const email = lead.email || '';
+        leadEmailInputEl.disabled = false;
+        leadEmailInputEl.value = email;
+        leadEmailInputEl.placeholder = email ? 'Email on file' : 'No email on file';
+      }
+      if (leadEmailSaveBtnEl) {
+        leadEmailSaveBtnEl.disabled = false;
+      }
       leadCampaignTagEl.textContent = `Campaign: ${lead.campaignName || assignedCampaignName || '—'}`;
       if (leadAttemptMetaEl) {
         const attempts = Number(lead.attempts || 0);
@@ -2194,6 +2266,12 @@
             DISPOSITION_LABELS[lastOutcomeKey] ||
             (lastOutcomeKey ? lastOutcomeKey.replace(/_/g, ' ') : 'Unknown');
           label = `Attempt ${attempts + 1} • Last: ${friendly}`;
+        }
+        if (lead.lastAttemptMs) {
+          const ageSec = Math.floor((Date.now() - lead.lastAttemptMs) / 1000);
+          if (ageSec > 0) {
+            label += ` • ${formatRelativeDuration(ageSec)} ago`;
+          }
         }
         leadAttemptMetaEl.textContent = label;
         leadAttemptMetaEl.style.display = label ? 'inline-flex' : 'none';
@@ -2659,6 +2737,27 @@
       });
     }
 
+    if (leadEmailSaveBtnEl && leadEmailInputEl) {
+      leadEmailSaveBtnEl.addEventListener('click', async () => {
+        if (!agentId || !currentLead) return;
+        const newEmail = (leadEmailInputEl.value || '').trim();
+        if (!newEmail) return;
+        try {
+          await fetch('/api/contact/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: newEmail,
+              phone: currentLead.phone || ''
+            })
+          });
+          currentLead.email = newEmail;
+        } catch (e) {
+          console.error('email update error', e);
+        }
+      });
+    }
+
     if (scriptBlockEl && scriptToggleEl && scriptContentEl) {
       const setScriptExpanded = (open) => {
         scriptToggleEl.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -2866,16 +2965,40 @@
 
           call.on('accept', () => {
             if (!currentLead) {
-              const inboundPhone = formatDisplayPhone(from);
-              const inboundLead = {
+              const rawFrom = from;
+              const inboundPhone = formatDisplayPhone(rawFrom);
+              const baseLead = {
                 name: inboundPhone || 'Inbound caller',
-                phone: inboundPhone || from || '',
+                phone: inboundPhone || rawFrom || '',
                 campaignName: 'Inbound',
                 attempts: 0,
                 lastOutcome: null,
                 isInbound: true
               };
-              setCurrentLead(inboundLead);
+              setCurrentLead(baseLead);
+              (async () => {
+                try {
+                  const res = await fetch(`/api/incoming-lookup?phone=${encodeURIComponent(rawFrom)}`);
+                  const data = await res.json();
+                  if (data && data.success && data.contact) {
+                    const c = data.contact;
+                    const prettyPhone = formatDisplayPhone(c.phone || rawFrom);
+                    const enriched = {
+                      ...baseLead,
+                      name: c.name || baseLead.name,
+                      phone: prettyPhone || baseLead.phone,
+                      email: c.email || '',
+                      attempts: c.attempts || 0,
+                      lastOutcome: c.lastOutcome || null,
+                      lastAttemptMs: c.lastAttemptMs || null,
+                      isInbound: true
+                    };
+                    setCurrentLead(enriched);
+                  }
+                } catch (e) {
+                  console.error('incoming lookup error', e);
+                }
+              })();
             }
 
             const leadName = (currentLead && currentLead.name) || 'Lead';

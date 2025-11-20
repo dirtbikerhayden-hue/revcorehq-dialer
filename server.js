@@ -377,18 +377,23 @@ const DISPOSITION_SKIP_TAGS = [
   'booked',
   'send_info_email',
   'send info via email',
+  'general_email_info',
+  'general email info',
+  'manual_email_info',
+  'manual email info',
   NON_PICKUP_REMOVED_TAG
 ];
 const lastAgentByNumber = {}; // track last agent who called a number
 const OUTCOME_LABELS = {
   not_interested: 'Not Interested',
   callback_requested: 'Callback Requested',
-  gatekeeper_transfer: 'Gatekeeper – Warm Transfer',
   wrong_contact: 'Wrong Contact',
   machine: 'Machine',
   machine_voicemail: 'Machine / Voicemail',
   bad_number: 'Bad Number',
   send_info_email: 'Send Info via Email',
+  general_email_info: 'General Email Info',
+  manual_email_info: 'Manual Email Info',
   booked: 'Booked Demo',
   connected: 'Connected',
   no_answer: 'No Answer',
@@ -1983,6 +1988,23 @@ function extractContactPhone(contact) {
   return null;
 }
 
+function extractContactEmail(contact) {
+  if (!contact) return null;
+  if (typeof contact.email === 'string' && contact.email.trim()) {
+    return contact.email.trim();
+  }
+  const emails = contact.contactEmails || contact.emails || [];
+  const firstEmail = emails.find(e => e && (e.email || e.address));
+  if (firstEmail && (firstEmail.email || firstEmail.address)) {
+    return (firstEmail.email || firstEmail.address).trim();
+  }
+  if (Array.isArray(contact.email)) {
+    const raw = contact.email.find(Boolean);
+    if (raw) return raw.trim();
+  }
+  return null;
+}
+
 function buildContactName(contact = {}) {
   const { firstName, lastName, name, fullName, companyName } = contact;
   const composite = `${firstName || ''} ${lastName || ''}`.trim();
@@ -2089,6 +2111,20 @@ async function ghlCreateContact(payload = {}) {
   } catch (err) {
     console.error('Error creating GHL contact:', err.response?.data || err.message);
     return null;
+  }
+}
+
+async function ghlUpdateContactEmail(contactId, email) {
+  if (!ghlClient || !contactId || !email) return;
+  try {
+    await ghlClient.put(
+      `/contacts/${contactId}`,
+      { email },
+      { params: { locationId: GHL_LOCATION_ID } }
+    );
+  } catch (err) {
+    console.error('Error updating GHL contact email:', err.response?.data || err.message);
+    throw err;
   }
 }
 
@@ -2199,6 +2235,28 @@ async function fetchGhlLeadForCampaign(campaign) {
     console.error('GHL fetch error:', err.response?.data || err.message);
   }
   return null;
+}
+
+function getContactAttemptSummary(contactId) {
+  if (!contactId) return null;
+  const key = String(contactId);
+  let attempts = 0;
+  let lastOutcome = null;
+  let lastAttemptMs = null;
+  Object.values(campaignStats || {}).forEach(stats => {
+    if (!stats || !stats.byContact) return;
+    const cStats = stats.byContact[key];
+    if (!cStats) return;
+    attempts += cStats.attempts || 0;
+    if (typeof cStats.lastAttemptMs === 'number') {
+      if (!lastAttemptMs || cStats.lastAttemptMs > lastAttemptMs) {
+        lastAttemptMs = cStats.lastAttemptMs;
+        lastOutcome = cStats.lastOutcome || null;
+      }
+    }
+  });
+  if (!attempts && !lastAttemptMs) return null;
+  return { attempts, lastOutcome, lastAttemptMs };
 }
 
 async function handleGhlDisposition(agentId, campaignId, meta, outcome, notes, leadDetails) {
@@ -2486,6 +2544,61 @@ app.get('/api/metrics/:agentId', (req, res) => {
       statusDurationSec,
       todayAnsweredHuman,
       todayConversions
+    }
+  });
+});
+
+app.get('/api/incoming-lookup', async (req, res) => {
+  const { phone } = req.query;
+  if (!phone) {
+    return res.status(400).json({ success: false, error: 'phone is required' });
+  }
+  ensureLeaderboardWeek();
+  const normalized = normalizeLocalPhone(phone) || normalizePhone(phone);
+  let contact = null;
+  let contactId = null;
+  let contactPhone = normalized;
+  let email = null;
+  let name = null;
+
+  try {
+    contact = await ghlSearchContactByPhone(normalized || phone);
+  } catch (err) {
+    console.error('incoming lookup GHL error:', err.response?.data || err.message);
+  }
+
+  if (contact) {
+    contactId = contact.id || contact.contactId || null;
+    contactPhone = extractContactPhone(contact) || normalized;
+    email = extractContactEmail(contact) || null;
+    name = buildContactName(contact);
+  }
+
+  let attempts = 0;
+  let lastOutcome = null;
+  let lastAttemptMs = null;
+  if (contactId) {
+    const summary = getContactAttemptSummary(contactId);
+    if (summary) {
+      attempts = summary.attempts || 0;
+      lastOutcome = summary.lastOutcome || null;
+      lastAttemptMs = summary.lastAttemptMs || null;
+    }
+  }
+
+  if (!contact && !attempts && !lastAttemptMs) {
+    return res.json({ success: false, contact: null });
+  }
+
+  res.json({
+    success: true,
+    contact: {
+      name: name || null,
+      phone: contactPhone || normalized || phone,
+      email: email || null,
+      attempts,
+      lastOutcome,
+      lastAttemptMs
     }
   });
 });
@@ -2879,6 +2992,42 @@ app.post('/twilio/recording', (req, res) => {
   res.json({ received: true });
 });
 
+app.post('/api/contact/email', express.json(), async (req, res) => {
+  const agentId = requireAgent(req, res);
+  if (!agentId) return;
+  const { email, phone } = req.body || {};
+  if (!email) {
+    return res.status(400).json({ ok: false, error: 'Email is required' });
+  }
+
+  let contactId = null;
+  const meta = activeLeadMetaByAgent[agentId];
+  if (meta && meta.ghlContactId) {
+    contactId = meta.ghlContactId;
+  } else if (phone) {
+    const normalized = normalizeLocalPhone(phone) || normalizePhone(phone);
+    try {
+      const contact = await ghlSearchContactByPhone(normalized || phone);
+      if (contact) {
+        contactId = contact.id || contact.contactId || null;
+      }
+    } catch (err) {
+      console.error('lookup contact by phone for email update failed:', err.response?.data || err.message);
+    }
+  }
+
+  if (!contactId) {
+    return res.status(404).json({ ok: false, error: 'No contact found to update' });
+  }
+
+  try {
+    await ghlUpdateContactEmail(contactId, email);
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: 'Unable to update contact email' });
+  }
+});
+
 app.post('/api/disposition', async (req, res) => {
   const { agentId, campaignId, outcome, notes, leadPhone, leadName } = req.body;
   const easternNow = ensureLeaderboardWeek();
@@ -2900,9 +3049,10 @@ app.post('/api/disposition', async (req, res) => {
     booked: 'answeredHuman',
     not_interested: 'answeredHuman',
     callback_requested: 'answeredHuman',
-    gatekeeper_transfer: 'answeredHuman',
     wrong_contact: 'answeredHuman',
     send_info_email: 'answeredHuman',
+    general_email_info: 'answeredHuman',
+    manual_email_info: 'answeredHuman',
     machine: 'answeredMachine',
     machine_voicemail: 'answeredMachine',
     no_answer: 'noAnswer',
