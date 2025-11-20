@@ -3205,8 +3205,10 @@ app.post('/api/disposition', async (req, res) => {
   if (isWithinDailyReportWindow(easternNow) && isWithinWeeklyReportWindow(easternNow)) {
     const dailyAgent = ensureDailyAgentMetric(reportDateId, agentId);
     dailyAgent.dispositions[safeOutcome] = (dailyAgent.dispositions[safeOutcome] || 0) + 1;
-    if (campaignId) {
-      const dailyCampaign = ensureDailyCampaignMetric(reportDateId, String(campaignId));
+    // Use the actual campaign that owns this lead (from meta) if request campaignId is missing/mismatched.
+    const effectiveCampaignId = campaignId || (meta && meta.campaignId) || null;
+    if (effectiveCampaignId) {
+      const dailyCampaign = ensureDailyCampaignMetric(reportDateId, String(effectiveCampaignId));
       dailyCampaign.dispositions[safeOutcome] = (dailyCampaign.dispositions[safeOutcome] || 0) + 1;
     }
     saveReportMetrics();
@@ -3243,7 +3245,8 @@ app.post('/api/disposition', async (req, res) => {
     }
   }
 
-  recordCampaignDisposition(campaignId, agentId, safeOutcome, contactIdForStats);
+  const effectiveCampaignIdForStats = campaignId || (meta && meta.campaignId) || null;
+  recordCampaignDisposition(effectiveCampaignIdForStats, agentId, safeOutcome, contactIdForStats);
 
   if (meta) {
     const activeCallSid = activeCallByAgent[agentId] || null;
