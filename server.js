@@ -396,7 +396,7 @@ const NON_PICKUP_OUTCOMES = [
 const MAX_NON_PICKUP_ATTEMPTS = 3;
 const NON_PICKUP_REMOVED_TAG = 'removed 3 attempts made';
 const NON_PICKUP_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours for all non-pickup outcomes
-const GLOBAL_RETRY_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes for any recent outcome
+const GLOBAL_RETRY_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24-hour global cooldown for outbound attempts
 const DISPOSITION_SKIP_TAGS = [
   'bad_number',
   'not_interested',
@@ -3208,14 +3208,43 @@ app.post('/api/disposition', async (req, res) => {
     }
     saveReportMetrics();
   }
-  const meta = activeLeadMetaByAgent[agentId];
-  const contactIdForStats = meta?.ghlContactId || null;
+  let meta = activeLeadMetaByAgent[agentId];
+  let contactIdForStats = meta?.ghlContactId || null;
+
+  // If this was a manual call (no active meta) but we have a campaign + phone,
+  // try to resolve the GHL contact so cooldowns and tags still apply.
+  if (!contactIdForStats && campaignId && leadPhone && ghlClient && GHL_LOCATION_ID) {
+    try {
+      const normalizedPhone = normalizeLocalPhone(leadPhone) || normalizePhone(leadPhone);
+      const contact = await ghlSearchContactByPhone(normalizedPhone || leadPhone);
+      if (contact && contact.id) {
+        contactIdForStats = contact.id;
+        if (!meta) {
+          const safeCampaignId = String(campaignId);
+          const campaign = campaigns[safeCampaignId] || {};
+          meta = {
+            ghlContactId: contact.id,
+            ghlOpportunityId: null,
+            campaignId: safeCampaignId,
+            campaignTag: campaign.ghlTag || null,
+            localLeadId: null,
+            localLeadName: leadName || null,
+            localLeadPhone: normalizedPhone || leadPhone
+          };
+        } else if (!meta.ghlContactId) {
+          meta.ghlContactId = contact.id;
+        }
+      }
+    } catch (err) {
+      console.error('lookup contact by phone for disposition failed:', err.response?.data || err.message);
+    }
+  }
 
   recordCampaignDisposition(campaignId, agentId, safeOutcome, contactIdForStats);
 
-  const activeCallSid = activeCallByAgent[agentId] || null;
-  const isAutosyncConnect = safeOutcome === 'connected';
   if (meta) {
+    const activeCallSid = activeCallByAgent[agentId] || null;
+    const isAutosyncConnect = safeOutcome === 'connected';
     if (!isAutosyncConnect) {
       try {
         await handleGhlDisposition(
@@ -3243,6 +3272,8 @@ app.post('/api/disposition', async (req, res) => {
   }
 
   // End the active call if it exists
+  const activeCallSid = activeCallByAgent[agentId] || null;
+  const isAutosyncConnect = safeOutcome === 'connected';
   if (activeCallSid && !isAutosyncConnect) {
     try {
       await client.calls(activeCallSid).update({ status: 'completed' });
