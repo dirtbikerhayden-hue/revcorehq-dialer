@@ -1090,12 +1090,14 @@ app.post('/api/admin/users', express.json(), (req, res) => {
     password,
     role,
     campaignId,
+    backupCampaignId,
     outboundNumber,
     inboundNumber,
     allowAfterHours
   } = req.body || {};
   const normalizedUsername = normalizeUsername(username);
   const normalizedCampaignId = campaignId ? String(campaignId) : null;
+  const normalizedBackupCampaignId = backupCampaignId ? String(backupCampaignId) : null;
   const normalizedOutbound = outboundNumber ? normalizePhone(outboundNumber) : '';
   const normalizedInbound = inboundNumber ? normalizePhone(inboundNumber) : '';
 
@@ -1108,6 +1110,9 @@ app.post('/api/admin/users', express.json(), (req, res) => {
   if (normalizedCampaignId && !campaigns[normalizedCampaignId]) {
     return res.status(400).json({ ok: false, error: 'Invalid campaignId' });
   }
+  if (normalizedBackupCampaignId && !campaigns[normalizedBackupCampaignId]) {
+    return res.status(400).json({ ok: false, error: 'Invalid backupCampaignId' });
+  }
 
   if (users[normalizedUsername]) {
     return res
@@ -1119,6 +1124,7 @@ app.post('/api/admin/users', express.json(), (req, res) => {
     password,
     role: role || 'agent',
     campaignId: normalizedCampaignId,
+    backupCampaignId: normalizedBackupCampaignId,
     outboundNumber: normalizedOutbound,
     inboundNumber: normalizedInbound,
     allowAfterHours: !!allowAfterHours
@@ -1141,6 +1147,7 @@ app.put('/api/admin/users/:username', express.json(), (req, res) => {
     password,
     role,
     campaignId,
+    backupCampaignId,
     outboundNumber,
     inboundNumber,
     allowAfterHours
@@ -1148,6 +1155,9 @@ app.put('/api/admin/users/:username', express.json(), (req, res) => {
   const normalizedCampaignId = typeof campaignId === 'undefined' || campaignId === ''
     ? undefined
     : String(campaignId);
+  const normalizedBackupCampaignId = typeof backupCampaignId === 'undefined' || backupCampaignId === ''
+    ? undefined
+    : String(backupCampaignId);
   const normalizedOutbound = typeof outboundNumber === 'undefined'
     ? undefined
     : outboundNumber === ''
@@ -1168,6 +1178,9 @@ app.put('/api/admin/users/:username', express.json(), (req, res) => {
   if (normalizedCampaignId && !campaigns[normalizedCampaignId]) {
     return res.status(400).json({ ok: false, error: 'Invalid campaignId' });
   }
+  if (normalizedBackupCampaignId && !campaigns[normalizedBackupCampaignId]) {
+    return res.status(400).json({ ok: false, error: 'Invalid backupCampaignId' });
+  }
 
   const current = users[oldUsername];
 
@@ -1178,6 +1191,10 @@ app.put('/api/admin/users/:username', express.json(), (req, res) => {
       typeof normalizedCampaignId !== 'undefined'
         ? normalizedCampaignId || null
         : current.campaignId || null,
+    backupCampaignId:
+      typeof normalizedBackupCampaignId !== 'undefined'
+        ? normalizedBackupCampaignId || null
+        : current.backupCampaignId || null,
     outboundNumber:
       typeof normalizedOutbound !== 'undefined'
         ? normalizedOutbound
@@ -2774,20 +2791,42 @@ app.post('/api/dialer/next', async (req, res) => {
   if (!resolvedCampaignId) {
     return res.status(400).json({ success: false, error: 'No campaign assigned to agent' });
   }
-  const campaign = campaigns[resolvedCampaignId];
-  if (!campaign) {
-    return res.status(400).json({ success: false, error: 'Invalid campaign' });
+  const user = users[agentId] || {};
+  const backupCampaignId = user.backupCampaignId || null;
+
+  const candidateIds = [];
+  if (resolvedCampaignId) candidateIds.push(resolvedCampaignId);
+  if (backupCampaignId && backupCampaignId !== resolvedCampaignId) {
+    candidateIds.push(backupCampaignId);
   }
 
+  let chosenCampaignId = null;
+  let campaign = null;
   let lead = null;
-  if (isGhlCampaign(campaign)) {
-    lead = await fetchGhlLeadForCampaign(campaign);
+
+  for (const cid of candidateIds) {
+    const c = campaigns[cid];
+    if (!c) continue;
+    let candidateLead = null;
+    if (isGhlCampaign(c)) {
+      candidateLead = await fetchGhlLeadForCampaign(c);
+    }
+    if (!candidateLead) {
+      candidateLead = popLocalLead(cid);
+    }
+    if (candidateLead) {
+      chosenCampaignId = cid;
+      campaign = c;
+      lead = candidateLead;
+      break;
+    }
   }
-  if (!lead) {
-    lead = popLocalLead(resolvedCampaignId);
-  }
-  if (!lead) {
-    return res.json({ success: false, error: 'No leads in queue for this campaign' });
+
+  if (!lead || !campaign) {
+    return res.json({
+      success: false,
+      error: 'No leads in queue for assigned or backup campaigns'
+    });
   }
   const fromNumber =
     getDialNumberForAgent(agentId) ||
@@ -2812,11 +2851,11 @@ app.post('/api/dialer/next', async (req, res) => {
 
     const leadPayload = {
       ...lead,
-      campaignId: resolvedCampaignId,
+      campaignId: chosenCampaignId,
       campaignName: campaign.name
     };
 
-    callMap[call.sid] = { agentId, lead: leadPayload, campaignId: resolvedCampaignId };
+    callMap[call.sid] = { agentId, lead: leadPayload, campaignId: chosenCampaignId };
     activeCallByAgent[agentId] = call.sid;
     lastAgentByNumber[lead.phone] = agentId;
 
@@ -2835,7 +2874,7 @@ app.post('/api/dialer/next', async (req, res) => {
     activeLeadMetaByAgent[agentId] = {
       ghlOpportunityId: leadPayload.ghlOpportunityId || null,
       ghlContactId: leadPayload.ghlContactId || null,
-      campaignId: resolvedCampaignId,
+      campaignId: chosenCampaignId,
       campaignTag: leadPayload.campaignTag || campaign.ghlTag || null,
       localLeadId: leadPayload.localLeadId || null,
       localLeadName: leadPayload.name || null,

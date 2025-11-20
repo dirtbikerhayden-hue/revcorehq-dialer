@@ -847,12 +847,18 @@
               </select>
             </div>
             <div>
+              <label for="userBackupCampaignSelect">Backup Campaign (optional)</label>
+              <select id="userBackupCampaignSelect">
+                <option value="">None</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-row">
+            <div>
               <label for="userOutboundInput">Outbound Number</label>
               <input id="userOutboundInput" placeholder="+15551234567" />
               <div class="field-note">Number we dial to reach the agent.</div>
             </div>
-          </div>
-          <div class="field-row">
             <div>
               <label for="userInboundInput">Inbound Number (optional)</label>
               <input id="userInboundInput" placeholder="+15557654321" />
@@ -1283,6 +1289,7 @@
     const userOutboundInput = document.getElementById('userOutboundInput');
     const userInboundInput = document.getElementById('userInboundInput');
     const userAfterHoursToggle = document.getElementById('userAfterHoursToggle');
+    const userBackupCampaignSelect = document.getElementById('userBackupCampaignSelect');
 
     const campaignCount = document.getElementById('campaignCount');
     const campaignsTableBody = document.getElementById('campaignsTableBody');
@@ -1631,6 +1638,17 @@
           opt.textContent = c.name;
           if (c.id === current) opt.selected = true;
           userCampaignSelect.appendChild(opt);
+        });
+      }
+      if (userBackupCampaignSelect) {
+        const currentBackup = userBackupCampaignSelect.value;
+        userBackupCampaignSelect.innerHTML = '<option value="">None</option>';
+        list.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = c.name;
+          if (c.id === currentBackup) opt.selected = true;
+          userBackupCampaignSelect.appendChild(opt);
         });
       }
       if (localCampaignSelect) {
@@ -2223,7 +2241,7 @@
           <td>
             <div class="actions-cell">
               <button class="btn btn-secondary btn-mini"
-                onclick="fillUserForm('${username.replace(/'/g, "\\'")}', '${(info.password || '').replace(/'/g, "\\'")}', '${(info.role || 'agent').replace(/'/g, "\\'")}', '${campaignId.replace(/'/g, "\\'")}', '${(info.outboundNumber || '').replace(/'/g, "\\'")}', '${(info.inboundNumber || '').replace(/'/g, "\\'")}', ${info.allowAfterHours === true ? 'true' : 'false'})">
+                onclick="fillUserForm('${username.replace(/'/g, "\\'")}', '${(info.password || '').replace(/'/g, "\\'")}', '${(info.role || 'agent').replace(/'/g, "\\'")}', '${campaignId.replace(/'/g, "\\'")}', '${(info.backupCampaignId || '').replace(/'/g, "\\'")}', '${(info.outboundNumber || '').replace(/'/g, "\\'")}', '${(info.inboundNumber || '').replace(/'/g, "\\'")}', ${info.allowAfterHours === true ? 'true' : 'false'})">
                 Edit
               </button>
               <button class="btn btn-danger btn-mini"
@@ -2238,13 +2256,16 @@
     }
 
     // expose for onclick
-    window.fillUserForm = (username, password, role, campaignId, outboundNumber, inboundNumber, allowAfterHours) => {
+    window.fillUserForm = (username, password, role, campaignId, backupCampaignId, outboundNumber, inboundNumber, allowAfterHours) => {
       usernameInput.value = username;
       newUsernameInput.value = "";
       passwordInput.value = password;
       roleSelect.value = role || 'agent';
       if (userCampaignSelect) {
         userCampaignSelect.value = campaignId || '';
+      }
+      if (userBackupCampaignSelect) {
+        userBackupCampaignSelect.value = backupCampaignId || '';
       }
       if (userOutboundInput) userOutboundInput.value = outboundNumber || '';
       if (userInboundInput) userInboundInput.value = inboundNumber || '';
@@ -2338,6 +2359,7 @@
       const password = passwordInput.value.trim();
       const role = roleSelect.value || 'agent';
       const campaignId = userCampaignSelect ? userCampaignSelect.value : '';
+      const backupCampaignId = userBackupCampaignSelect ? userBackupCampaignSelect.value : '';
       const outboundNumber = userOutboundInput ? userOutboundInput.value.trim() : '';
       const inboundNumber = userInboundInput ? userInboundInput.value.trim() : '';
       const allowAfterHours = userAfterHoursToggle ? userAfterHoursToggle.checked : false;
@@ -2349,7 +2371,7 @@
 
       const { ok, data } = await adminFetch('/api/admin/users', {
         method: 'POST',
-        body: JSON.stringify({ username, password, role, campaignId, outboundNumber, inboundNumber, allowAfterHours })
+        body: JSON.stringify({ username, password, role, campaignId, backupCampaignId, outboundNumber, inboundNumber, allowAfterHours })
       });
 
       if (!ok) {
@@ -2361,6 +2383,7 @@
         newUsernameInput.value = "";
         roleSelect.value = 'agent';
         if (userCampaignSelect) userCampaignSelect.value = '';
+        if (userBackupCampaignSelect) userBackupCampaignSelect.value = '';
         if (userOutboundInput) userOutboundInput.value = '';
         if (userInboundInput) userInboundInput.value = '';
         if (userAfterHoursToggle) userAfterHoursToggle.checked = false;
@@ -2444,6 +2467,7 @@
       const pwd = passwordInput.value.trim();
       const role = roleSelect.value || 'agent';
       const campaignId = userCampaignSelect ? userCampaignSelect.value : '';
+      const backupCampaignId = userBackupCampaignSelect ? userBackupCampaignSelect.value : '';
       const outboundNumber = userOutboundInput ? userOutboundInput.value.trim() : '';
       const inboundNumber = userInboundInput ? userInboundInput.value.trim() : '';
       const allowAfterHours = userAfterHoursToggle ? userAfterHoursToggle.checked : false;
@@ -2452,6 +2476,7 @@
       if (pwd) payload.password = pwd;
       if (role) payload.role = role;
       payload.campaignId = campaignId;
+      payload.backupCampaignId = backupCampaignId;
       payload.outboundNumber = outboundNumber;
       payload.inboundNumber = inboundNumber;
       payload.allowAfterHours = allowAfterHours;
@@ -2470,6 +2495,7 @@
         newUsernameInput.value = "";
         roleSelect.value = 'agent';
         if (userCampaignSelect) userCampaignSelect.value = '';
+        if (userBackupCampaignSelect) userBackupCampaignSelect.value = '';
         if (userOutboundInput) userOutboundInput.value = '';
         if (userInboundInput) userInboundInput.value = '';
         await loadLeaderboard();
