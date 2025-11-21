@@ -91,6 +91,7 @@ const AGENT_SLOTS_FILE = path.join(DATA_DIR, 'agent-slots.json');
 const LOCAL_PRESENCE_FILE = path.join(DATA_DIR, 'local-presence.json');
 const REPORT_METRICS_FILE = path.join(DATA_DIR, 'report-metrics.json');
 const RECENT_DIAL_FILE = path.join(DATA_DIR, 'recent-dials.json');
+const RECENT_PHONE_DIAL_FILE = path.join(DATA_DIR, 'recent-phone-dials.json');
 const AGENT_METRICS_FILE = path.join(DATA_DIR, 'agent-metrics.json');
 const SCRIPTS_FILE = path.join(DATA_DIR, 'scripts.json');
 // High-priority inbound agents can be set later via config; default empty.
@@ -242,6 +243,7 @@ function listCampaignArray() {
 const DEFAULT_CAMPAIGN_STATS = {};
 const DEFAULT_LOCAL_LEADS = { queue: {}, completed: {} };
 const RECENT_DIAL_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const PHONE_DIAL_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours per phone number
 
 function loadAgentMetricsStore() {
   try {
@@ -297,6 +299,36 @@ function saveRecentDialMap() {
     fs.writeFileSync(RECENT_DIAL_FILE, JSON.stringify(recentDialMap, null, 2));
   } catch (err) {
     console.error('Error saving recent-dials.json:', err);
+  }
+}
+
+function loadRecentPhoneDialMap() {
+  try {
+    if (!fs.existsSync(RECENT_PHONE_DIAL_FILE)) {
+      return {};
+    }
+    const raw = fs.readFileSync(RECENT_PHONE_DIAL_FILE, 'utf8');
+    const parsed = JSON.parse(raw) || {};
+    const now = Date.now();
+    const cleaned = {};
+    Object.entries(parsed).forEach(([phone, entry]) => {
+      if (!entry || typeof entry !== 'object') return;
+      const ts = Number(entry.ts || 0);
+      if (!ts || now - ts > PHONE_DIAL_TTL_MS) return;
+      cleaned[phone] = { ts };
+    });
+    return cleaned;
+  } catch (err) {
+    console.error('Error loading recent-phone-dials.json:', err);
+    return {};
+  }
+}
+
+function saveRecentPhoneDialMap() {
+  try {
+    fs.writeFileSync(RECENT_PHONE_DIAL_FILE, JSON.stringify(recentPhoneDialMap, null, 2));
+  } catch (err) {
+    console.error('Error saving recent-phone-dials.json:', err);
   }
 }
 
@@ -384,6 +416,7 @@ const reportMetricState = loadReportMetrics();
 dailyAgentReport = reportMetricState.agents || {};
 dailyCampaignReport = reportMetricState.campaigns || {};
 const recentDialMap = loadRecentDialMap();
+const recentPhoneDialMap = loadRecentPhoneDialMap();
 const contactLocks = {}; // in-memory lock so a contact isn't dialed twice concurrently
 const NON_PICKUP_OUTCOMES = [
   'no_answer',
@@ -947,6 +980,33 @@ function markRecentlyDialed(campaignId, phone, contactId) {
     ts: Date.now()
   };
   saveRecentDialMap();
+}
+
+function normalizePhoneForCooldown(raw) {
+  if (!raw) return null;
+  const normalized = normalizeLocalPhone(raw) || normalizePhone(raw);
+  return normalized || null;
+}
+
+function markPhoneDialed(rawPhone) {
+  const phone = normalizePhoneForCooldown(rawPhone);
+  if (!phone) return;
+  recentPhoneDialMap[phone] = { ts: Date.now() };
+  saveRecentPhoneDialMap();
+}
+
+function isPhoneRecentlyDialed(rawPhone) {
+  const phone = normalizePhoneForCooldown(rawPhone);
+  if (!phone) return false;
+  const entry = recentPhoneDialMap[phone];
+  if (!entry || !entry.ts) return false;
+  const age = Date.now() - Number(entry.ts || 0);
+  if (age > PHONE_DIAL_TTL_MS) {
+    delete recentPhoneDialMap[phone];
+    saveRecentPhoneDialMap();
+    return false;
+  }
+  return true;
 }
 
 function isContactLocked(contactId) {
@@ -2245,6 +2305,8 @@ async function fetchGhlLeadForCampaign(campaign) {
         if (hasFinalDispo) continue;
         const phone = extractContactPhone(contact);
         if (!phone) continue;
+        // Strongest guard: 24h cooldown per phone number, regardless of contact/campaign.
+        if (isPhoneRecentlyDialed(phone)) continue;
         if (isRecentlyDialed(campaignId, phone, contactId || contact.id)) continue;
 
         if (campaign.ghlStageId) {
@@ -3098,11 +3160,20 @@ app.all('/twilio/status', (req, res) => {
   }
 
   if (CallStatus === 'completed' || CallStatus === 'failed' || CallStatus === 'busy' || CallStatus === 'no-answer') {
+    // Phone-level 24h cooldown for outbound attempts
+    const lead = callInfo.lead || {};
+    const dialedPhone =
+      lead.phone ||
+      (callInfo.manual && callInfo.manual.toNumber) ||
+      null;
+    if (dialedPhone) {
+      markPhoneDialed(dialedPhone);
+    }
+
     if (activeCallByAgent[agentId] === CallSid) {
       delete activeCallByAgent[agentId];
     }
     // unlock contact if we have it
-    const lead = callInfo.lead || {};
     const contactId = lead.ghlContactId || lead.id || null;
     if (contactId) {
       unlockContact(contactId);
