@@ -3201,6 +3201,9 @@ app.post('/api/disposition', async (req, res) => {
     saveAgentMetricsStore();
   }
 
+  let meta = activeLeadMetaByAgent[agentId];
+  let contactIdForStats = meta?.ghlContactId || null;
+
   const reportDateId = getDateId(easternNow);
   if (isWithinDailyReportWindow(easternNow) && isWithinWeeklyReportWindow(easternNow)) {
     const dailyAgent = ensureDailyAgentMetric(reportDateId, agentId);
@@ -3213,8 +3216,6 @@ app.post('/api/disposition', async (req, res) => {
     }
     saveReportMetrics();
   }
-  let meta = activeLeadMetaByAgent[agentId];
-  let contactIdForStats = meta?.ghlContactId || null;
 
   // If this was a manual call (no active meta) but we have a campaign + phone,
   // try to resolve the GHL contact so cooldowns and tags still apply.
