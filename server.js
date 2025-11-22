@@ -71,7 +71,14 @@ app.all('/twilio/inbound/fallback', (req, res) => {
     .slice(0, 2);
 
   if (!allTargets.length) {
-    twiml.say('No agents available. Please try again later.');
+    // No agents picked up any leg — send to voicemail.
+    twiml.say('Sorry, no one from the team is available to take your call right now.');
+    twiml.record({
+      maxLength: 120,
+      playBeep: true,
+      action: `${BASE_URL}/twilio/voicemail-complete`,
+      method: 'POST'
+    });
     return res.type('text/xml').send(twiml.toString());
   }
 
@@ -1669,7 +1676,14 @@ app.all('/twilio/inbound', (req, res) => {
 
   const success = buildSequentialInbound(twiml, fromNumber, toNumber);
   if (!success) {
-    twiml.say('No agents available. Please try again later.');
+    // No available agents at all – route straight to voicemail.
+    twiml.say('Sorry, no one from the team is available to take your call right now.');
+    twiml.record({
+      maxLength: 120,
+      playBeep: true,
+      action: `${BASE_URL}/twilio/voicemail-complete`,
+      method: 'POST'
+    });
   }
 
   res.type('text/xml').send(twiml.toString());
@@ -3186,6 +3200,37 @@ app.all('/twilio/status', (req, res) => {
 app.post('/twilio/recording', (req, res) => {
   console.log('Recording callback:', req.body.CallSid, req.body.RecordingUrl, req.body.RecordingStatus);
   res.json({ received: true });
+});
+
+// Inbound voicemail completion: store / forward recording, optionally log in GHL.
+app.post('/twilio/voicemail-complete', async (req, res) => {
+  try {
+    const fromNumber = req.body.From || null;
+    const recordingUrl = req.body.RecordingUrl || null;
+    const duration = req.body.RecordingDuration || null;
+    console.log('[Voicemail] from:', fromNumber, 'url:', recordingUrl, 'duration:', duration);
+
+    if (fromNumber && recordingUrl && ghlClient && GHL_LOCATION_ID) {
+      try {
+        const normalizedPhone = normalizeLocalPhone(fromNumber) || normalizePhone(fromNumber);
+        const contact = await ghlSearchContactByPhone(normalizedPhone || fromNumber);
+        if (contact && contact.id) {
+          const noteLines = [
+            'Inbound voicemail received.',
+            `From: ${fromNumber}`,
+            recordingUrl ? `Recording: ${recordingUrl}` : null,
+            duration ? `Duration (sec): ${duration}` : null
+          ].filter(Boolean);
+          await ghlAddNote(contact.id, noteLines.join('\n'));
+        }
+      } catch (err) {
+        console.error('Error logging voicemail to GHL:', err.response?.data || err.message);
+      }
+    }
+  } catch (err) {
+    console.error('Voicemail complete handler error:', err.message);
+  }
+  res.type('text/xml').send('<Response></Response>');
 });
 
 app.post('/api/contact/email', express.json(), async (req, res) => {
