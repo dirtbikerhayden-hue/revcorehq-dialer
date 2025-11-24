@@ -3159,12 +3159,6 @@ app.all('/twilio/status', (req, res) => {
 
   const durationSec = parseInt(CallDuration, 10);
   const hasDuration = !Number.isNaN(durationSec) && durationSec >= 0;
-  const LIVE_MIN_DURATION_SEC = 15;
-  const isHumanLive =
-    CallStatus === 'completed' &&
-    AnsweredBy === 'human' &&
-    hasDuration &&
-    durationSec >= LIVE_MIN_DURATION_SEC;
 
   if (isWithinWeeklyWindow(easternNow)) {
     if (CallStatus === 'in-progress' || CallStatus === 'answered') {
@@ -3174,7 +3168,6 @@ app.all('/twilio/status', (req, res) => {
     }
 
     if (CallStatus === 'completed') {
-      if (isHumanLive) m.answeredHuman += 1;
       if (AnsweredBy === 'machine') m.answeredMachine += 1;
       if (hasDuration) {
         m.totalTalkTimeSec += durationSec;
@@ -3195,19 +3188,6 @@ app.all('/twilio/status', (req, res) => {
 
     markAgentActivity(agentId);
     saveAgentMetricsStore();
-  }
-
-  // For outbound and manual calls, count a "live conversation" once per
-  // completed human call that meets the duration threshold.
-  if (
-    isHumanLive &&
-    isWithinDailyReportWindow(easternNow) &&
-    isWithinWeeklyReportWindow(easternNow)
-  ) {
-    const reportDateId = getDateId(easternNow);
-    const dailyAgent = ensureDailyAgentMetric(reportDateId, agentId);
-    dailyAgent.liveConnects += 1;
-    saveReportMetrics();
   }
 
   // Auto-mark hard failures with 0s duration as bad numbers so they are skipped in future
@@ -3423,6 +3403,19 @@ app.post('/api/disposition', async (req, res) => {
   if (isWithinDailyReportWindow(easternNow) && isWithinWeeklyReportWindow(easternNow)) {
     const dailyAgent = ensureDailyAgentMetric(reportDateId, agentId);
     dailyAgent.dispositions[safeOutcome] = (dailyAgent.dispositions[safeOutcome] || 0) + 1;
+    // Treat human-facing dispositions as "live conversations" for daily metrics.
+    const LIVE_DISPOSITION_OUTCOMES = new Set([
+      'booked',
+      'not_interested',
+      'callback_requested',
+      'wrong_contact',
+      'send_info_email',
+      'general_email_info',
+      'manual_email_info'
+    ]);
+    if (LIVE_DISPOSITION_OUTCOMES.has(safeOutcome)) {
+      dailyAgent.liveConnects += 1;
+    }
     // Use the actual campaign that owns this lead (from meta) if request campaignId is missing/mismatched.
     const effectiveCampaignId = campaignId || (meta && meta.campaignId) || null;
     if (effectiveCampaignId) {
