@@ -425,6 +425,8 @@ dailyCampaignReport = reportMetricState.campaigns || {};
 const recentDialMap = loadRecentDialMap();
 const recentPhoneDialMap = loadRecentPhoneDialMap();
 const contactLocks = {}; // in-memory lock so a contact isn't dialed twice concurrently
+const campaignLeadStatsCache = {};
+let ghlRateLimitedUntilMs = 0;
 const NON_PICKUP_OUTCOMES = [
   'no_answer',
   'busy',
@@ -2489,6 +2491,24 @@ async function handleGhlDisposition(agentId, campaignId, meta, outcome, notes, l
 async function getCampaignLeadStats(campaign) {
   if (!isGhlCampaign(campaign)) return null;
   if (!ghlClient) return null;
+
+  const campaignId = campaign.id || campaign.campaignId || null;
+  if (!campaignId) return null;
+
+  const now = Date.now();
+  const cached = campaignLeadStatsCache[campaignId];
+
+  // If we have fresh stats (<5 minutes old), reuse them.
+  const CACHE_TTL_MS = 5 * 60 * 1000;
+  if (cached && now - cached.lastFetchedMs < CACHE_TTL_MS) {
+    return { total: cached.total, remaining: cached.remaining };
+  }
+
+  // If we're currently rate-limited by GHL, fall back to cached stats (if any).
+  if (ghlRateLimitedUntilMs && now < ghlRateLimitedUntilMs) {
+    return cached || null;
+  }
+
   try {
     let page = 1;
     const limit = 100;
@@ -2520,10 +2540,18 @@ async function getCampaignLeadStats(campaign) {
       if (opportunities.length < limit) break;
       page += 1;
     }
+    campaignLeadStatsCache[campaignId] = { total, remaining, lastFetchedMs: now };
     return { total, remaining };
   } catch (err) {
+    const status = err.response?.status || err.statusCode || err.response?.data?.statusCode;
+    if (status === 429) {
+      // Back off from hitting GHL for a few minutes when rate-limited.
+      ghlRateLimitedUntilMs = now + 5 * 60 * 1000;
+      console.error('Error counting GHL leads (rate limited 429). Using cached stats if available.');
+      return cached || null;
+    }
     console.error('Error counting GHL leads:', err.response?.data || err.message);
-    return null;
+    return cached || null;
   }
 }
 
