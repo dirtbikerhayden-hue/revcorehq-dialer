@@ -403,10 +403,10 @@ function recordCampaignDisposition(campaignId, agentId, outcome, contactId) {
     if (NON_PICKUP_OUTCOMES.includes(outcome)) {
       contactStats.attempts = (contactStats.attempts || 0) + 1;
 
-      if (contactStats.attempts >= MAX_NON_PICKUP_ATTEMPTS) {
-        // mark in GHL so future fetches also skip by tag
-        ghlAddTags(contactId, [NON_PICKUP_REMOVED_TAG]).catch(() => {});
-      }
+      // With support for multiple phone numbers per contact, we no longer
+      // remove a contact from the campaign after only 3 non-pickup attempts.
+      // Final removal is handled via explicit dispositions/tags (e.g.
+      // bad_number, not_interested) instead of this aggregate counter.
     }
   }
 
@@ -2116,6 +2116,30 @@ function extractContactPhone(contact) {
   return null;
 }
 
+function extractContactPhones(contact) {
+  if (!contact) return [];
+  const result = [];
+  const primary = extractContactPhone(contact);
+  if (primary) {
+    result.push(primary.trim());
+  }
+  const phones = contact.contactPhones || contact.phoneNumbers || [];
+  phones.forEach(p => {
+    const raw = (p && (p.phone || p.number)) ? (p.phone || p.number).trim() : null;
+    if (raw && !result.includes(raw)) {
+      result.push(raw);
+    }
+  });
+  if (Array.isArray(contact.phone)) {
+    contact.phone.forEach(raw => {
+      if (typeof raw === 'string' && raw.trim() && !result.includes(raw.trim())) {
+        result.push(raw.trim());
+      }
+    });
+  }
+  return result;
+}
+
 function extractContactEmail(contact) {
   if (!contact) return null;
   if (typeof contact.email === 'string' && contact.email.trim()) {
@@ -2325,8 +2349,28 @@ async function fetchGhlLeadForCampaign(campaign) {
           return DISPOSITION_SKIP_TAGS.includes(lower);
         });
         if (hasFinalDispo) continue;
-        const phone = extractContactPhone(contact);
-        if (!phone) continue;
+
+        const phones = extractContactPhones(contact);
+        if (!phones.length) continue;
+
+        let phone = null;
+        const attempts = contactStats ? (contactStats.attempts || 0) : 0;
+        const primaryExhausted =
+          contactStats &&
+          (contactStats.lastOutcome === 'bad_number' ||
+           attempts >= MAX_NON_PICKUP_ATTEMPTS);
+
+        // Always prefer primary phone first; once it is exhausted (bad_number
+        // or 3 non-pickup attempts), and if a secondary exists, move to the
+        // second phone.
+        if (!primaryExhausted) {
+          phone = phones[0];
+        } else if (phones.length > 1) {
+          phone = phones[1];
+        } else {
+          continue;
+        }
+
         // Strongest guard: 24h cooldown per phone number, regardless of contact/campaign.
         if (isPhoneRecentlyDialed(phone)) continue;
         if (isRecentlyDialed(campaignId, phone, contactId || contact.id)) continue;
