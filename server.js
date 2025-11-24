@@ -1997,22 +1997,22 @@ function selectInboundTargets(fromNumber, toNumber) {
       .map(([id]) => id);
     const matchAvailable = getAvailableAgents(matchedAgents).filter(id => {
       const status = getAgentStatus(id);
-      return status === 'online' || status === 'away';
+      return status === 'online' || status === 'idle' || status === 'away';
     });
     if (matchAvailable.length) {
       return matchAvailable;
     }
   }
 
-  // Otherwise, get all agents who are free and at least away/online.
+  // Otherwise, get all agents who are free (not on a call) and not fully offline.
   const available = getAvailableAgents(allAgents).filter(id => {
     const status = getAgentStatus(id);
-    return status === 'online' || status === 'away';
+    return status === 'online' || status === 'idle' || status === 'away';
   });
 
   if (!available.length) return [];
 
-  const statusOrder = { online: 0, away: 1 };
+  const statusOrder = { on_call: 0, online: 1, idle: 2, away: 3 };
   available.sort((a, b) => {
     const sa = getAgentStatus(a);
     const sb = getAgentStatus(b);
@@ -2613,8 +2613,13 @@ function getAgentStatus(agentId) {
 
   const diffMinutes = (Date.now() - m.lastActivityMs) / 60000;
 
+  // 0–2 minutes since last activity: actively online
   if (diffMinutes <= 2) return 'online';
-  if (diffMinutes <= 10) return 'away';
+  // 2–10 minutes: idle (dialer open but not recently active)
+  if (diffMinutes <= 10) return 'idle';
+  // 10–30 minutes: away
+  if (diffMinutes <= 30) return 'away';
+  // 30+ minutes: offline
   return 'offline';
 }
 

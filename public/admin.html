@@ -1515,7 +1515,10 @@
       } else if (s === 'on_call') {
         cls = 'status-badge status-active';
         label = `On Call · ${durationText}`;
-      } else if (s === 'away' || s === 'idle') {
+      } else if (s === 'idle') {
+        cls = 'status-badge status-idle';
+        label = `Idle · ${durationText}`;
+      } else if (s === 'away') {
         cls = 'status-badge status-idle';
         label = `Away · ${durationText}`;
       }
