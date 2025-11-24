@@ -2398,9 +2398,9 @@
           console.warn('[Dialer] Softphone did not connect in time; auto-marking bad number.');
           statusTextEl.innerHTML =
             'No ringback / audio detected. Auto-tagging this lead as ' +
-            '<span>Bad Number</span> and moving to the next lead.';
-          sendDisposition('bad_number', true);
-        }, 2500);
+            '<span>Failed</span> and moving to the next lead.';
+          sendDisposition('failed', true);
+        }, 4000);
 
       } catch (e) {
         console.error('dial error', e);
