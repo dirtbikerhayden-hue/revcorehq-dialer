@@ -1397,13 +1397,20 @@ async function buildCampaignResponse() {
     const localQueue = getLocalQueueCount(id);
     const localDone = getLocalCompletedCount(id);
     if (localQueue || localDone) {
-      normalized.computedTotalLeads = (normalized.computedTotalLeads || 0) + localQueue + localDone;
-      normalized.computedRemainingLeads = (normalized.computedRemainingLeads || 0) + localQueue;
+      // Keep the configured total leads as-is and only
+      // layer local-queue data into the remaining count.
+      const baseRemaining =
+        typeof normalized.computedRemainingLeads === 'number'
+          ? normalized.computedRemainingLeads
+          : (typeof normalized.totalLeads === 'number' ? normalized.totalLeads : 0);
+      normalized.computedRemainingLeads = baseRemaining + localQueue;
     }
     if (isGhlCampaign(normalized)) {
+      // Only use GHL for a live "remaining" view; we no longer
+      // trust or display the GHL total since contacts are pruned
+      // after 3 attempts.
       const stats = await getCampaignLeadStats(normalized);
-      if (stats) {
-        normalized.computedTotalLeads = stats.total;
+      if (stats && typeof stats.remaining === 'number') {
         normalized.computedRemainingLeads = stats.remaining;
       }
     }

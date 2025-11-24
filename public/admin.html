@@ -1024,7 +1024,6 @@
                 <th>Pipeline</th>
                 <th>Stage</th>
                 <th>Tag</th>
-                <th>Total</th>
                 <th>Remaining</th>
                 <th class="actions-col">Actions</th>
               </tr>
@@ -1595,16 +1594,15 @@
       campaignsTableBody.innerHTML = "";
       if (!list.length) {
         campaignsTableBody.innerHTML = `
-          <tr><td colspan="8" style="padding:8px; color:var(--text-soft);">
+          <tr><td colspan="7" style="padding:8px; color:var(--text-soft);">
             No campaigns configured yet.
           </td></tr>
         `;
       } else {
         list.forEach(c => {
-          const total = typeof c.computedTotalLeads === 'number'
-            ? c.computedTotalLeads
+          const remaining = typeof c.computedRemainingLeads === 'number'
+            ? c.computedRemainingLeads
             : (typeof c.totalLeads === 'number' ? c.totalLeads : '—');
-          const remaining = typeof c.computedRemainingLeads === 'number' ? c.computedRemainingLeads : '—';
           const pipelineLabel = getPipelineLabel(c.ghlPipelineId);
           const stageLabel = getStageLabel(c.ghlPipelineId, c.ghlStageId);
           const tr = document.createElement('tr');
@@ -1614,7 +1612,6 @@
             <td>${pipelineLabel}</td>
             <td>${stageLabel}</td>
             <td>${c.ghlTag || '—'}</td>
-            <td>${total}</td>
             <td>${remaining}</td>
             <td>
               <div class="actions-cell">
@@ -2319,7 +2316,7 @@
         }
 
         adminKey = pwd;
-        setStatus(loginStatus, 'Admin unlocked.', true);
+        setStatus(loginStatus, 'Admin unlocked. Loading data…', true);
 
         metricsRow.classList.remove('hidden');
         mainContent.classList.remove('hidden');
@@ -2328,20 +2325,33 @@
         if (campaignFormArea) campaignFormArea.classList.remove('hidden');
         if (campaignMetricsCard) campaignMetricsCard.classList.remove('hidden');
         if (localUploadCard) localUploadCard.classList.remove('hidden');
-        if (localUploadCard) localUploadCard.classList.remove('hidden');
-        await loadGhlPipelines();
-        await loadGhlTags();
-        await loadCampaigns();
-        await loadLeaderboard();
-        await loadUsers();
-        await loadDialerSettings();
-        await loadLocalPresence();
+
+        // Kick off initial data loads in parallel so the
+        // dashboard becomes usable faster instead of waiting
+        // on each request sequentially (especially GHL calls).
+        Promise.all([
+          loadGhlPipelines(),
+          loadGhlTags(),
+          loadCampaigns(),
+          loadLeaderboard(),
+          loadUsers(),
+          loadDialerSettings(),
+          loadLocalPresence()
+        ]).catch(err => {
+          console.error('Initial admin data load error:', err);
+        });
 
         // refresh metrics & status every 30s while unlocked
         setInterval(async () => {
-          await loadLeaderboard();
-          await loadCampaigns();
-          await loadUsers();
+          try {
+            await Promise.all([
+              loadLeaderboard(),
+              loadCampaigns(),
+              loadUsers()
+            ]);
+          } catch (err) {
+            console.error('Periodic admin refresh error:', err);
+          }
         }, 30000);
       } catch (err) {
         setStatus(loginStatus, 'Error contacting admin API.', false);
