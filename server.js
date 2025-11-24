@@ -1821,6 +1821,7 @@ const {
   BASE_URL,
   ZAPIER_HOOK_URL,
   SLACK_WEBHOOK_URL,
+  SLACK_VOICEMAIL_WEBHOOK_URL,
   PORT,
   GHL_API_KEY,
   GHL_LOCATION_ID,
@@ -3225,6 +3226,20 @@ app.post('/twilio/voicemail-complete', async (req, res) => {
         }
       } catch (err) {
         console.error('Error logging voicemail to GHL:', err.response?.data || err.message);
+      }
+    }
+
+    if (SLACK_VOICEMAIL_WEBHOOK_URL && fromNumber && recordingUrl) {
+      const textLines = [
+        '*New inbound voicemail*',
+        `• From: \`${fromNumber}\``,
+        duration ? `• Duration: ${duration} sec` : null,
+        `• Recording: ${recordingUrl}`
+      ].filter(Boolean);
+      try {
+        await axios.post(SLACK_VOICEMAIL_WEBHOOK_URL, { text: textLines.join('\n') });
+      } catch (err) {
+        console.error('Error sending voicemail notification to Slack:', err.response?.data || err.message);
       }
     }
   } catch (err) {
