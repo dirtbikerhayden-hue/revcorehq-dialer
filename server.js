@@ -72,7 +72,10 @@ app.all('/twilio/inbound/fallback', (req, res) => {
 
   if (!allTargets.length) {
     // No agents picked up any leg — send to voicemail.
-    twiml.say('Sorry, no one from the team is available to take your call right now.');
+    twiml.say(
+      'Sorry, we are not able to get to your call right now, or we may be on the other line. ' +
+      'Please leave your name, company, and the best callback number after the beep.'
+    );
     twiml.record({
       maxLength: 120,
       playBeep: true,
@@ -1686,7 +1689,10 @@ app.all('/twilio/inbound', (req, res) => {
   const success = buildSequentialInbound(twiml, fromNumber, toNumber);
   if (!success) {
     // No available agents at all – route straight to voicemail.
-    twiml.say('Sorry, no one from the team is available to take your call right now.');
+    twiml.say(
+      'Sorry, we are not able to get to your call right now, or we may be on the other line. ' +
+      'Please leave your name, company, and the best callback number after the beep.'
+    );
     twiml.record({
       maxLength: 120,
       playBeep: true,
@@ -3270,10 +3276,11 @@ app.post('/twilio/recording', (req, res) => {
 // Inbound voicemail completion: store / forward recording, optionally log in GHL.
 app.post('/twilio/voicemail-complete', async (req, res) => {
   try {
-    const fromNumber = req.body.From || null;
-    const recordingUrl = req.body.RecordingUrl || null;
-    const duration = req.body.RecordingDuration || null;
-    console.log('[Voicemail] from:', fromNumber, 'url:', recordingUrl, 'duration:', duration);
+    const fromNumber = req.body.From || req.query.From || null;
+    const toNumber = req.body.To || req.query.To || null;
+    const recordingUrl = req.body.RecordingUrl || req.query.RecordingUrl || null;
+    const duration = req.body.RecordingDuration || req.query.RecordingDuration || null;
+    console.log('[Voicemail] from:', fromNumber, 'to:', toNumber, 'url:', recordingUrl, 'duration:', duration);
 
     if (fromNumber && recordingUrl && ghlClient && GHL_LOCATION_ID) {
       try {
@@ -3283,6 +3290,7 @@ app.post('/twilio/voicemail-complete', async (req, res) => {
           const noteLines = [
             'Inbound voicemail received.',
             `From: ${fromNumber}`,
+            toNumber ? `To: ${toNumber}` : null,
             recordingUrl ? `Recording: ${recordingUrl}` : null,
             duration ? `Duration (sec): ${duration}` : null
           ].filter(Boolean);
@@ -3297,6 +3305,7 @@ app.post('/twilio/voicemail-complete', async (req, res) => {
       const textLines = [
         '*New inbound voicemail*',
         `• From: \`${fromNumber}\``,
+        toNumber ? `• To: \`${toNumber}\`` : null,
         duration ? `• Duration: ${duration} sec` : null,
         `• Recording: ${recordingUrl}`
       ].filter(Boolean);
