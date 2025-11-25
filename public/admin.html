@@ -592,6 +592,21 @@
     white-space: nowrap;
   }
 
+  .report-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: flex-end;
+  }
+
+  @media (max-width: 720px) {
+    .report-row {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+    }
+  }
+
   /* STATUS TEXT / BADGES */
 
   .status-text {
@@ -949,6 +964,39 @@
           </table>
         </div>
 
+        <!-- REPORTS -->
+        <div class="card hidden" id="reportsCard" style="margin-bottom: 16px;">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Reports</div>
+              <div class="card-subtitle">
+                Build and send daily or weekly summaries to Zapier.
+              </div>
+            </div>
+          </div>
+          <div class="report-row">
+            <div>
+              <label for="reportDailyDate">Daily report date (EST)</label>
+              <input id="reportDailyDate" type="date" />
+              <div class="field-note">Defaults to today if left blank.</div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;">
+              <button class="btn btn-secondary" id="sendDailyReportBtn" type="button">Send Daily Report</button>
+            </div>
+          </div>
+          <div class="report-row">
+            <div>
+              <label for="reportWeeklyDate">Week of (any day)</label>
+              <input id="reportWeeklyDate" type="date" />
+              <div class="field-note">We’ll aggregate Monday–Saturday for that week.</div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;">
+              <button class="btn btn-secondary" id="sendWeeklyReportBtn" type="button">Send Weekly Report</button>
+            </div>
+          </div>
+          <div id="reportStatus" class="status-text"></div>
+        </div>
+
         <!-- CAMPAIGNS -->
         <div class="card" style="margin-bottom: 16px;">
           <div class="card-header">
@@ -1300,6 +1348,7 @@
 
     const leaderboardBody = document.getElementById('leaderboardBody');
     const settingsCard = document.getElementById('settingsCard');
+    const reportsCard = document.getElementById('reportsCard');
     const campaignFormArea = document.getElementById('campaignFormArea');
     const campaignIdInput = document.getElementById('campaignIdInput');
     const campaignNameInput = document.getElementById('campaignNameInput');
@@ -1323,6 +1372,11 @@
     const lpAreaInput = document.getElementById('lpAreaInput');
     const lpNumberInput = document.getElementById('lpNumberInput');
     const lpStatus = document.getElementById('lpStatus');
+    const reportDailyDateInput = document.getElementById('reportDailyDate');
+    const reportWeeklyDateInput = document.getElementById('reportWeeklyDate');
+    const sendDailyReportBtn = document.getElementById('sendDailyReportBtn');
+    const sendWeeklyReportBtn = document.getElementById('sendWeeklyReportBtn');
+    const reportStatus = document.getElementById('reportStatus');
     const addLpBtn = document.getElementById('addLpBtn');
     const clearLpBtn = document.getElementById('clearLpBtn');
     const lpTableBody = document.getElementById('lpTableBody');
@@ -1435,6 +1489,42 @@
       }
       const ok = res.ok && data.ok !== false;
       return { ok, data };
+    }
+
+    async function handleSendDailyReport() {
+      if (!adminKey) {
+        setStatus(reportStatus, 'Unlock admin first.', false);
+        return;
+      }
+      const date = (reportDailyDateInput && reportDailyDateInput.value) || '';
+      const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+      setStatus(reportStatus, 'Sending daily report…', true);
+      const { ok, data } = await adminFetch(`/api/admin/report/daily/send${qs}`, {
+        method: 'POST'
+      });
+      if (!ok) {
+        setStatus(reportStatus, data.error || 'Failed to send daily report.', false);
+      } else {
+        setStatus(reportStatus, 'Daily report sent to Zapier.', true);
+      }
+    }
+
+    async function handleSendWeeklyReport() {
+      if (!adminKey) {
+        setStatus(reportStatus, 'Unlock admin first.', false);
+        return;
+      }
+      const date = (reportWeeklyDateInput && reportWeeklyDateInput.value) || '';
+      const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+      setStatus(reportStatus, 'Sending weekly report…', true);
+      const { ok, data } = await adminFetch(`/api/admin/report/weekly/send${qs}`, {
+        method: 'POST'
+      });
+      if (!ok) {
+        setStatus(reportStatus, data.error || 'Failed to send weekly report.', false);
+      } else {
+        setStatus(reportStatus, 'Weekly report sent to Zapier.', true);
+      }
     }
 
     async function saveScriptFromEditor() {
@@ -2328,6 +2418,7 @@
         if (campaignFormArea) campaignFormArea.classList.remove('hidden');
         if (campaignMetricsCard) campaignMetricsCard.classList.remove('hidden');
         if (localUploadCard) localUploadCard.classList.remove('hidden');
+        if (reportsCard) reportsCard.classList.remove('hidden');
 
         // Kick off initial data loads in parallel so the
         // dashboard becomes usable faster instead of waiting
@@ -2638,6 +2729,12 @@
     }
     if (localUploadBtn) {
       localUploadBtn.addEventListener('click', handleLocalUpload);
+    }
+    if (sendDailyReportBtn) {
+      sendDailyReportBtn.addEventListener('click', handleSendDailyReport);
+    }
+    if (sendWeeklyReportBtn) {
+      sendWeeklyReportBtn.addEventListener('click', handleSendWeeklyReport);
     }
     if (localUploadBtn) {
       localUploadBtn.addEventListener('click', handleLocalUpload);

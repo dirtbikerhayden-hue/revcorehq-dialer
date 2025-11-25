@@ -709,8 +709,8 @@ async function buildDailyReport(dateId) {
   };
 }
 
-async function buildWeeklyReport() {
-  const easternNow = getEasternNow();
+async function buildWeeklyReport(baseDate) {
+  const easternNow = baseDate || getEasternNow();
   const base = new Date(easternNow.getTime());
   const day = base.getDay(); // 0 Sun
   const diffToMonday = day === 0 ? -6 : 1 - day;
@@ -827,7 +827,8 @@ let lastDailyReportDateId = null;
 let lastWeeklyReportWeekStart = null;
 
 async function maybeSendDailyReport(easternNow) {
-  if (!REPORT_WEBHOOK_URL) return;
+  const hookUrl = getReportWebhookUrl();
+  if (!hookUrl) return;
   const dateId = getDateId(easternNow);
   const hour = easternNow.getHours();
   const minute = easternNow.getMinutes();
@@ -842,7 +843,7 @@ async function maybeSendDailyReport(easternNow) {
 
   try {
     const report = await buildDailyReport(dateId);
-    await axios.post(REPORT_WEBHOOK_URL, {
+    await axios.post(hookUrl, {
       type: 'daily_report',
       date: report.date,
       hoursInWindow: report.hoursInWindow,
@@ -858,7 +859,8 @@ async function maybeSendDailyReport(easternNow) {
 }
 
 async function maybeSendWeeklyReport(easternNow) {
-  if (!REPORT_WEBHOOK_URL) return;
+  const hookUrl = getReportWebhookUrl();
+  if (!hookUrl) return;
   const hour = easternNow.getHours();
   const minute = easternNow.getMinutes();
   const day = easternNow.getDay(); // 0=Sun, 6=Sat
@@ -872,9 +874,9 @@ async function maybeSendWeeklyReport(easternNow) {
   if (!shouldSend) return;
 
   try {
-    const weekly = await buildWeeklyReport();
+    const weekly = await buildWeeklyReport(easternNow);
     if (lastWeeklyReportWeekStart === weekly.weekStartDate) return;
-    await axios.post(REPORT_WEBHOOK_URL, {
+    await axios.post(hookUrl, {
       type: 'weekly_report',
       weekStartDate: weekly.weekStartDate,
       hoursPerDay: weekly.hoursPerDay,
@@ -1174,7 +1176,13 @@ app.get('/api/admin/report/weekly', async (req, res) => {
   if (!isValidAdmin(req)) {
     return res.status(401).json({ ok: false, error: 'Unauthorized' });
   }
-  const report = await buildWeeklyReport();
+  const dateParam = (req.query.date || '').toString().trim();
+  let baseDate = null;
+  if (dateParam) {
+    // Interpret as YYYY-MM-DD in Eastern; we only care about the calendar day.
+    baseDate = new Date(`${dateParam}T12:00:00`);
+  }
+  const report = await buildWeeklyReport(baseDate);
   res.json({ ok: true, report });
 });
 
@@ -1183,8 +1191,9 @@ app.post('/api/admin/report/daily/send', async (req, res) => {
   if (!isValidAdmin(req)) {
     return res.status(401).json({ ok: false, error: 'Unauthorized' });
   }
-  if (!ZAPIER_HOOK_URL) {
-    return res.status(400).json({ ok: false, error: 'ZAPIER_HOOK_URL not configured' });
+  const hookUrl = getReportWebhookUrl();
+  if (!hookUrl) {
+    return res.status(400).json({ ok: false, error: 'REPORT_WEBHOOK_URL (or ZAPIER_HOOK_URL) not configured' });
   }
   const dateParam = (req.query.date || '').toString().trim();
   let dateId;
@@ -1196,7 +1205,7 @@ app.post('/api/admin/report/daily/send', async (req, res) => {
   }
   const report = await buildDailyReport(dateId);
   try {
-    await axios.post(ZAPIER_HOOK_URL, {
+    await axios.post(hookUrl, {
       type: 'daily_report',
       date: report.date,
       report
@@ -1212,12 +1221,18 @@ app.post('/api/admin/report/weekly/send', async (req, res) => {
   if (!isValidAdmin(req)) {
     return res.status(401).json({ ok: false, error: 'Unauthorized' });
   }
-  if (!ZAPIER_HOOK_URL) {
-    return res.status(400).json({ ok: false, error: 'ZAPIER_HOOK_URL not configured' });
+  const hookUrl = getReportWebhookUrl();
+  if (!hookUrl) {
+    return res.status(400).json({ ok: false, error: 'REPORT_WEBHOOK_URL (or ZAPIER_HOOK_URL) not configured' });
   }
-  const report = await buildWeeklyReport();
+  const dateParam = (req.query.date || '').toString().trim();
+  let baseDate = null;
+  if (dateParam) {
+    baseDate = new Date(`${dateParam}T12:00:00`);
+  }
+  const report = await buildWeeklyReport(baseDate);
   try {
-    await axios.post(ZAPIER_HOOK_URL, {
+    await axios.post(hookUrl, {
       type: 'weekly_report',
       weekStartDate: report.weekStartDate,
       report
@@ -1932,6 +1947,10 @@ const {
 const GHL_API_VERSION = '2021-07-28';
 const GHL_BASE_ENDPOINT = GHL_BASE_URL || 'https://services.leadconnectorhq.com';
 const DIALER_LOCK_TAG = GHL_LOCK_TAG || 'RehashDialer:Locked';
+
+function getReportWebhookUrl() {
+  return REPORT_WEBHOOK_URL || ZAPIER_HOOK_URL || null;
+}
 
 console.log('Loaded Twilio SID:', TWILIO_ACCOUNT_SID);
 console.log(
