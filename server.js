@@ -820,6 +820,90 @@ async function buildWeeklyReport() {
 }
 
 // ===============================
+//   REPORT WEBHOOK SCHEDULER
+// ===============================
+
+let lastDailyReportDateId = null;
+let lastWeeklyReportWeekStart = null;
+
+async function maybeSendDailyReport(easternNow) {
+  if (!REPORT_WEBHOOK_URL) return;
+  const dateId = getDateId(easternNow);
+  const hour = easternNow.getHours();
+  const minute = easternNow.getMinutes();
+
+  // Fire once per day shortly after the reporting window closes (8:05pm Eastern).
+  const shouldSend =
+    hour === DAILY_REPORT_END_HOUR &&
+    minute === 5 &&
+    lastDailyReportDateId !== dateId;
+
+  if (!shouldSend) return;
+
+  try {
+    const report = await buildDailyReport(dateId);
+    await axios.post(REPORT_WEBHOOK_URL, {
+      type: 'daily_report',
+      date: report.date,
+      hoursInWindow: report.hoursInWindow,
+      totals: report.totals,
+      agents: report.agents,
+      campaigns: report.campaigns
+    });
+    lastDailyReportDateId = dateId;
+    console.log('[Reports] Sent daily report for', dateId);
+  } catch (err) {
+    console.error('[Reports] Error sending daily report:', err.response?.data || err.message);
+  }
+}
+
+async function maybeSendWeeklyReport(easternNow) {
+  if (!REPORT_WEBHOOK_URL) return;
+  const hour = easternNow.getHours();
+  const minute = easternNow.getMinutes();
+  const day = easternNow.getDay(); // 0=Sun, 6=Sat
+
+  // Fire once per week on Saturday shortly after the window closes (8:10pm Eastern).
+  const shouldSend =
+    day === 6 &&
+    hour === DAILY_REPORT_END_HOUR &&
+    minute === 10;
+
+  if (!shouldSend) return;
+
+  try {
+    const weekly = await buildWeeklyReport();
+    if (lastWeeklyReportWeekStart === weekly.weekStartDate) return;
+    await axios.post(REPORT_WEBHOOK_URL, {
+      type: 'weekly_report',
+      weekStartDate: weekly.weekStartDate,
+      hoursPerDay: weekly.hoursPerDay,
+      days: weekly.days,
+      totals: weekly.totals,
+      agents: weekly.agents,
+      campaigns: weekly.campaigns
+    });
+    lastWeeklyReportWeekStart = weekly.weekStartDate;
+    console.log('[Reports] Sent weekly report for week starting', weekly.weekStartDate);
+  } catch (err) {
+    console.error('[Reports] Error sending weekly report:', err.response?.data || err.message);
+  }
+}
+
+function startReportScheduler() {
+  if (!REPORT_WEBHOOK_URL) {
+    console.log('[Reports] REPORT_WEBHOOK_URL not configured; skipping report scheduler.');
+    return;
+  }
+  console.log('[Reports] Scheduler enabled. Daily + weekly summaries will be sent to REPORT_WEBHOOK_URL.');
+  setInterval(() => {
+    const easternNow = getEasternNow();
+    maybeSendDailyReport(easternNow);
+    maybeSendWeeklyReport(easternNow);
+  }, 60 * 1000);
+}
+
+// ===============================
 //         APP SETTINGS
 // ===============================
 
@@ -1835,6 +1919,7 @@ const {
   TWILIO_AUTH_TOKEN,
   BASE_URL,
   ZAPIER_HOOK_URL,
+  REPORT_WEBHOOK_URL,
   SLACK_WEBHOOK_URL,
   SLACK_VOICEMAIL_WEBHOOK_URL,
   PORT,
@@ -3674,6 +3759,8 @@ app.get('/metrics-admin', (req, res) => {
 // =====================
 
 const listenPort = process.env.PORT || 3000;
+
+startReportScheduler();
 
 app.listen(listenPort, () => {
   console.log(`Rehash Dialer server listening on port ${listenPort}`);
