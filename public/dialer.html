@@ -2371,9 +2371,15 @@
         });
         const data = await res.json();
         if (!data.success) {
-          statusTextEl.textContent = data.error || 'No leads available for this campaign.';
+          const msg = data.error || 'No leads available for this campaign.';
+          statusTextEl.textContent = msg;
           setCurrentLead(null);
           bumpCallState('');
+          // If backend auto-marked an undialable number as Bad Number, keep the
+          // session flowing by immediately pulling the next lead.
+          if (data.autoBadNumber && sessionState === 'running') {
+            setTimeout(requestNextCall, 400);
+          }
           return;
         }
 

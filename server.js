@@ -192,6 +192,12 @@ function normalizePhone(num) {
   return `+${digits}`;
 }
 
+function isDomesticPhone(num) {
+  const normalized = normalizePhone(num || '');
+  // Treat standard North American numbers (+1 + 10 digits) as allowed.
+  return !!normalized && normalized.startsWith('+1') && normalized.length === 12;
+}
+
 // ===============================
 //         CAMPAIGN STORE
 // ===============================
@@ -2465,6 +2471,19 @@ async function fetchGhlLeadForCampaign(campaign) {
         const phones = extractContactPhones(contact);
         if (!phones.length) continue;
 
+        // Only dial standard North American numbers. Foreign / unsupported
+        // numbers can cause Twilio geo-permission errors and break the
+        // agent flow, so we skip them entirely here.
+        const domesticPhones = phones.filter(p => isDomesticPhone(p));
+        if (!domesticPhones.length) {
+          console.log('[GHL] Skipping non-domestic contact', contactId || contact.id, phones);
+          // Auto-mark foreign-only contacts as bad_number in our campaign stats
+          // so they are treated as exhausted for future pulls.
+          const contactIdForStats = contactId || contact.id || null;
+          recordCampaignDisposition(campaignId, 'system', 'bad_number', contactIdForStats);
+          continue;
+        }
+
         let phone = null;
         const attempts = contactStats ? (contactStats.attempts || 0) : 0;
         const primaryExhausted =
@@ -2476,9 +2495,9 @@ async function fetchGhlLeadForCampaign(campaign) {
         // or 3 non-pickup attempts), and if a secondary exists, move to the
         // second phone.
         if (!primaryExhausted) {
-          phone = phones[0];
-        } else if (phones.length > 1) {
-          phone = phones[1];
+          phone = domesticPhones[0];
+        } else if (domesticPhones.length > 1) {
+          phone = domesticPhones[1];
         } else {
           continue;
         }
@@ -3168,8 +3187,85 @@ app.post('/api/dialer/next', async (req, res) => {
       lead: responseLead
     });
   } catch (err) {
-    console.error('Error creating outbound call:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    const errMsg = err?.message || '';
+    console.error('Error creating outbound call:', err.response?.data || errMsg);
+
+    // If Twilio rejects the call due to geo-permissions / unauthorized
+    // destination, automatically mark this as a bad number and move on so the
+    // agent is never stuck on an undialable lead.
+    const lowerMsg = errMsg.toLowerCase();
+    const isGeoPermissionError =
+      lowerMsg.includes('geo-permission') ||
+      lowerMsg.includes('not authorized to call') ||
+      lowerMsg.includes('international permissions');
+
+    if (isGeoPermissionError) {
+      const campaignIdForStats = chosenCampaignId || resolvedCampaignId || null;
+      const contactIdForStats = lead.ghlContactId || lead.id || null;
+      const leadPhone = lead.phone || null;
+      const leadName = lead.name || null;
+
+      if (campaignIdForStats || contactIdForStats || leadPhone) {
+        recordCampaignDisposition(campaignIdForStats, agentId, 'bad_number', contactIdForStats);
+
+        if (lead.localLeadId) {
+          recordLocalLeadOutcome(
+            campaignIdForStats,
+            {
+              ghlContactId: contactIdForStats,
+              ghlOpportunityId: lead.ghlOpportunityId || null,
+              campaignId: campaignIdForStats,
+              campaignTag: lead.campaignTag || campaign?.ghlTag || null,
+              localLeadId: lead.localLeadId,
+              localLeadName: leadName,
+              localLeadPhone: leadPhone
+            },
+            'bad_number',
+            'Auto-marked bad number due to blocked/foreign destination.',
+            { leadPhone, leadName }
+          );
+        }
+
+        if (contactIdForStats && ghlClient && GHL_LOCATION_ID) {
+          (async () => {
+            try {
+              await handleGhlDisposition(
+                agentId,
+                campaignIdForStats,
+                {
+                  ghlContactId: contactIdForStats,
+                  ghlOpportunityId: lead.ghlOpportunityId || null,
+                  campaignId: campaignIdForStats,
+                  campaignTag: lead.campaignTag || campaign?.ghlTag || null,
+                  localLeadId: lead.localLeadId || null,
+                  localLeadName: leadName,
+                  localLeadPhone: leadPhone
+                },
+                'bad_number',
+                'Auto-marked bad number due to blocked/foreign destination.',
+                { leadPhone, leadName }
+              );
+            } catch (e) {
+              console.error('Error auto-tagging bad_number for geo-permission failure:', e.response?.data || e.message);
+            }
+          })().catch(() => {});
+        }
+      }
+
+      // Unlock contact so future pulls can safely skip it based on outcome.
+      const contactIdToUnlock = lead.ghlContactId || lead.id || null;
+      if (contactIdToUnlock) {
+        unlockContact(contactIdToUnlock);
+      }
+
+      return res.json({
+        success: false,
+        autoBadNumber: true,
+        error: 'Blocked foreign or unauthorized destination. Auto-marked as Bad Number and skipped.'
+      });
+    }
+
+    res.status(500).json({ success: false, error: errMsg || 'Failed to start call.' });
   }
 });
 
