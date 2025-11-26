@@ -3136,6 +3136,24 @@
 
         twilioDevice.on('incoming', call => {
           console.log('[Dialer] Incoming call to browser client');
+
+          // If we already have an active call, ignore the new one so Twilio
+          // can route it to another available agent. We never show the popup
+          // to an agent who is already on a live call.
+          if (activeConnection) {
+            console.warn('[Dialer] Incoming while already on a call; ignoring on this client.');
+            try {
+              if (typeof call.ignore === 'function') {
+                call.ignore();
+              } else {
+                call.reject();
+              }
+            } catch (e) {
+              console.error('Error ignoring overlapping incoming call', e);
+            }
+            return;
+          }
+
           pendingIncomingCall = call;
           activeConnection = call;
           setMuteState(false);
@@ -3143,20 +3161,25 @@
           bumpCallState('Agent ringing');
 
           const from = call.parameters?.From || 'Unknown';
-          if (sessionState === 'running' || pendingManualPhone) {
-            // Outbound campaign or manual-dial leg – auto-accept without requiring user click
+
+          // Auto-accept ONLY for manual outbound calls we initiated.
+          // All true inbound calls (including callbacks) always show the popup.
+          const isManualDialLeg = !!pendingManualPhone;
+
+          if (isManualDialLeg) {
             try {
               call.accept();
             } catch (e) {
               console.warn('[Dialer] Auto-accept failed:', e);
             }
           } else {
-            // Inbound or manual scenarios – show modal so agent can choose
             if (incomingMetaEl) incomingMetaEl.textContent = `From: ${from}`;
             showIncomingModal();
           }
 
           call.on('accept', () => {
+            // Once accepted, remove the overlay so it doesn't block interaction.
+            hideIncomingModal();
             // Once the agent accepts, remove the overlay so it
             // doesn't block interaction with the main dialer UI.
             hideIncomingModal();
