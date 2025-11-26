@@ -1892,6 +1892,10 @@ app.post('/login', express.json(), (req, res) => {
 
   console.log('Agent logged in:', normalizedUsername);
 
+  // Treat a successful login as recent activity so the agent
+  // immediately appears Online instead of Offline.
+  markAgentActivity(normalizedUsername);
+
   const callbackNumber = getDialNumberForAgent(normalizedUsername) || null;
 
   return res.json({
@@ -1913,6 +1917,11 @@ app.get('/me', (req, res) => {
 
   const user = users[req.session.agentId] || {};
   const callbackNumber = getDialNumberForAgent(req.session.agentId) || null;
+
+   // Refresh activity heartbeat whenever the dialer checks /me
+   // so agents with an open tab remain "Online" until 30 minutes
+   // of no traffic from the browser.
+   markAgentActivity(req.session.agentId);
 
   return res.json({
     loggedIn: true,
