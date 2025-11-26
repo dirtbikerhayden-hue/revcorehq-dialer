@@ -3149,6 +3149,7 @@ app.get('/api/incoming-lookup', async (req, res) => {
   let contactPhone = normalized;
   let email = null;
   let name = null;
+  let company = null;
 
   try {
     contact = await ghlSearchContactByPhone(normalized || phone);
@@ -3161,6 +3162,11 @@ app.get('/api/incoming-lookup', async (req, res) => {
     contactPhone = extractContactPhone(contact) || normalized;
     email = extractContactEmail(contact) || null;
     name = buildContactName(contact);
+    company =
+      contact.company ||
+      contact.companyName ||
+      contact.businessName ||
+      null;
   }
 
   let attempts = 0;
@@ -3185,6 +3191,7 @@ app.get('/api/incoming-lookup', async (req, res) => {
       name: name || null,
       phone: contactPhone || normalized || phone,
       email: email || null,
+      company: company || null,
       attempts,
       lastOutcome,
       lastAttemptMs

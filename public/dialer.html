@@ -1303,6 +1303,7 @@
             <div>
               <strong id="leadName">No active call</strong><br/>
               <span id="leadPhone" style="color: var(--text-subtle);"></span>
+              <div id="leadCompany" style="color: var(--text-subtle); font-size: 0.85rem; margin-top: 2px;"></div>
               <div class="current-lead-email-row">
                 <label for="leadEmailInput">Email:</label>
                 <input id="leadEmailInput" class="current-lead-email-input" type="email" placeholder="No email on file" disabled />
@@ -1572,6 +1573,7 @@
     const sessionChipEl       = document.getElementById('sessionChip');
     const leadNameEl          = document.getElementById('leadName');
     const leadPhoneEl         = document.getElementById('leadPhone');
+    const leadCompanyEl       = document.getElementById('leadCompany');
     const leadEmailInputEl    = document.getElementById('leadEmailInput');
     const leadEmailSaveBtnEl  = document.getElementById('leadEmailSaveBtn');
     const leadCampaignTagEl   = document.getElementById('leadCampaignTag');
@@ -2196,6 +2198,9 @@
       if (!lead) {
         leadNameEl.textContent = 'No active call';
         leadPhoneEl.textContent = '';
+        if (leadCompanyEl) {
+          leadCompanyEl.textContent = '';
+        }
         leadCampaignTagEl.textContent = 'Campaign: —';
         if (leadEmailInputEl) {
           leadEmailInputEl.value = '';
@@ -2225,6 +2230,10 @@
       currentLeadBlockEl.style.opacity = 1;
       leadNameEl.textContent = lead.name || 'Lead';
       leadPhoneEl.textContent = lead.phone || '';
+      if (leadCompanyEl) {
+        const company = lead.company || '';
+        leadCompanyEl.textContent = company ? company : '';
+      }
       if (leadEmailInputEl) {
         const email = lead.email || '';
         leadEmailInputEl.disabled = false;
@@ -3001,6 +3010,7 @@
                 name: inboundPhone || 'Inbound caller',
                 phone: inboundPhone || rawFrom || '',
                 campaignName: 'Inbound',
+                company: '',
                 attempts: 0,
                 lastOutcome: null,
                 isInbound: true
@@ -3013,10 +3023,11 @@
                   if (data && data.success && data.contact) {
                     const c = data.contact;
                     const prettyPhone = formatDisplayPhone(c.phone || rawFrom);
-                    const enriched = {
+                  const enriched = {
                       ...baseLead,
                       name: c.name || baseLead.name,
                       phone: prettyPhone || baseLead.phone,
+                      company: c.company || baseLead.company || '',
                       email: c.email || '',
                       attempts: c.attempts || 0,
                       lastOutcome: c.lastOutcome || null,
@@ -3024,6 +3035,10 @@
                       isInbound: true
                     };
                     setCurrentLead(enriched);
+                    if (incomingMetaEl) {
+                      const companyText = enriched.company ? ` – ${enriched.company}` : '';
+                      incomingMetaEl.textContent = `From: ${enriched.name}${companyText}`;
+                    }
                   }
                 } catch (e) {
                   console.error('incoming lookup error', e);
