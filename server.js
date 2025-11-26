@@ -1040,6 +1040,95 @@ function startReportScheduler() {
 }
 
 // ===============================
+//    ADMIN-TRIGGERED REPORTING
+// ===============================
+
+// Manual daily report trigger from Admin UI
+app.post('/api/admin/report/daily/send', async (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+
+  const hookUrl = getReportWebhookUrl();
+  if (!hookUrl) {
+    return res.status(400).json({
+      ok: false,
+      error: 'REPORT_WEBHOOK_URL or ZAPIER_HOOK_URL is not configured on the server.'
+    });
+  }
+
+  const dateParam = (req.query && req.query.date) || '';
+  const safeDateId = typeof dateParam === 'string' && dateParam.match(/^\d{4}-\d{2}-\d{2}$/)
+    ? dateParam
+    : getDateId(getEasternNow());
+
+  try {
+    const report = await buildDailyReport(safeDateId);
+    await axios.post(hookUrl, {
+      type: 'daily_report',
+      date: report.date,
+      hoursInWindow: report.hoursInWindow,
+      totals: report.totals,
+      agents: report.agents,
+      campaigns: report.campaigns
+    });
+    return res.json({ ok: true, report });
+  } catch (err) {
+    console.error('[Reports] Admin daily report error:', err.response?.data || err.message);
+    const status = err.response?.status || 500;
+    return res.status(status).json({
+      ok: false,
+      error: 'Failed to send daily report to Zapier.',
+      details: err.response?.data || err.message
+    });
+  }
+});
+
+// Manual weekly report trigger from Admin UI
+app.post('/api/admin/report/weekly/send', async (req, res) => {
+  if (!isValidAdmin(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+
+  const hookUrl = getReportWebhookUrl();
+  if (!hookUrl) {
+    return res.status(400).json({
+      ok: false,
+      error: 'REPORT_WEBHOOK_URL or ZAPIER_HOOK_URL is not configured on the server.'
+    });
+  }
+
+  const weekParam = (req.query && (req.query.weekDate || req.query.date)) || '';
+  let baseDate = null;
+  if (typeof weekParam === 'string' && weekParam.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    // Interpret as YYYY-MM-DD in Eastern time; time of day does not matter.
+    baseDate = new Date(`${weekParam}T12:00:00-05:00`);
+  }
+
+  try {
+    const weekly = await buildWeeklyReport(baseDate || getEasternNow());
+    await axios.post(hookUrl, {
+      type: 'weekly_report',
+      weekStartDate: weekly.weekStartDate,
+      hoursPerDay: weekly.hoursPerDay,
+      days: weekly.days,
+      totals: weekly.totals,
+      agents: weekly.agents,
+      campaigns: weekly.campaigns
+    });
+    return res.json({ ok: true, report: weekly });
+  } catch (err) {
+    console.error('[Reports] Admin weekly report error:', err.response?.data || err.message);
+    const status = err.response?.status || 500;
+    return res.status(status).json({
+      ok: false,
+      error: 'Failed to send weekly report to Zapier.',
+      details: err.response?.data || err.message
+    });
+  }
+});
+
+// ===============================
 //         APP SETTINGS
 // ===============================
 
