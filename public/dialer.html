@@ -2131,28 +2131,31 @@
     async function runSpeakerTest() {
       stopSpeakerTest();
       try {
-        const audio = new Audio();
-        audio.loop = false;
-        // Very short silent test clip — just to confirm routing works.
-        audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
-        // If output selection is supported and we have a chosen device, try to route to it.
-        if (audio.setSinkId && pendingSpeakerDeviceId && pendingSpeakerDeviceId !== 'default') {
-          try {
-            await audio.setSinkId(pendingSpeakerDeviceId);
-          } catch (e) {
-            console.warn('setSinkId failed, using default output', e);
-          }
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) {
+          setAudioStatus('Browser cannot play test tone (no AudioContext).', false);
+          return;
         }
-        speakerTestAudio = audio;
-        setAudioStatus('Playing test sound on selected speaker…');
-        await audio.play();
+        const audioCtx = new AudioCtx();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880; // clear beep
+        gain.gain.value = 0.2;
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        setAudioStatus('Playing speaker test tone…');
         setTimeout(() => {
-          stopSpeakerTest();
+          try {
+            osc.stop();
+            audioCtx.close();
+          } catch (e) {}
           setAudioStatus('Speaker test finished.');
-        }, 1200);
+        }, 800);
       } catch (err) {
         console.error('speaker test error', err);
-        setAudioStatus('Unable to play test sound. Check output device.', false);
+        setAudioStatus('Unable to play test tone. Check output device.', false);
       }
     }
 
