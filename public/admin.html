@@ -2495,37 +2495,44 @@
 
     function renderLocalPresenceTable() {
       if (!lpTableBody) return;
-      const entries = Object.entries(localPresenceMap || {});
-      if (!entries.length) {
+      const rows = [];
+      Object.entries(localPresenceMap || {}).forEach(([area, nums]) => {
+        const pool = Array.isArray(nums) ? nums : (nums ? [nums] : []);
+        pool.forEach(num => {
+          rows.push({ area, num });
+        });
+      });
+      if (!rows.length) {
         lpTableBody.innerHTML = `<tr><td colspan="3" style="padding:10px 8px; color:var(--text-soft);">No local presence numbers yet.</td></tr>`;
         return;
       }
-      lpTableBody.innerHTML = entries.map(([area, nums]) => {
-        const pool = Array.isArray(nums) ? nums : (nums ? [nums] : []);
-        const display = pool.join(', ');
-        return `
+      lpTableBody.innerHTML = rows.map(({ area, num }) => `
         <tr>
           <td>${area}</td>
-          <td>${display}</td>
+          <td>${num}</td>
           <td style="white-space:nowrap;">
-            <button class="btn btn-secondary btn-small" data-lp-edit="${area}">Edit</button>
-            <button class="btn btn-danger btn-small" data-lp-delete="${area}">Delete</button>
+            <button class="btn btn-secondary btn-small" data-lp-edit-area="${area}" data-lp-edit-number="${num}">Edit</button>
+            <button class="btn btn-danger btn-small" data-lp-delete-area="${area}" data-lp-delete-number="${num}">Delete</button>
           </td>
-        </tr>`;
-      }).join('');
-      lpTableBody.querySelectorAll('[data-lp-edit]').forEach(btn => {
+        </tr>
+      `).join('');
+      lpTableBody.querySelectorAll('[data-lp-edit-area]').forEach(btn => {
         btn.addEventListener('click', () => {
-          const area = btn.getAttribute('data-lp-edit');
-          lpAreaInput.value = area;
-          const nums = localPresenceMap[area];
-          const pool = Array.isArray(nums) ? nums : (nums ? [nums] : []);
-          lpNumberInput.value = pool.join(', ');
+          const num = btn.getAttribute('data-lp-edit-number');
+          lpNumberInput.value = num || '';
         });
       });
-      lpTableBody.querySelectorAll('[data-lp-delete]').forEach(btn => {
+      lpTableBody.querySelectorAll('[data-lp-delete-area]').forEach(btn => {
         btn.addEventListener('click', async () => {
-          const area = btn.getAttribute('data-lp-delete');
-          delete localPresenceMap[area];
+          const area = btn.getAttribute('data-lp-delete-area');
+          const num = btn.getAttribute('data-lp-delete-number');
+          const pool = Array.isArray(localPresenceMap[area]) ? localPresenceMap[area] : (localPresenceMap[area] ? [localPresenceMap[area]] : []);
+          const nextPool = pool.filter(n => n !== num);
+          if (nextPool.length) {
+            localPresenceMap[area] = nextPool;
+          } else {
+            delete localPresenceMap[area];
+          }
           await saveLocalPresence();
         });
       });
@@ -2605,13 +2612,28 @@
         setStatus(lpStatus, 'Unlock admin first.', false);
         return;
       }
-      const key = (lpAreaInput.value || '').trim();
-      const rawNums = (lpNumberInput.value || '').split(/[,;\s]+/).map(v => v.trim()).filter(Boolean);
-      if (!key || !rawNums.length) {
-        setStatus(lpStatus, 'Area/label and at least one number required.', false);
+      const rawNum = (lpNumberInput.value || '').trim();
+      if (!rawNum) {
+        setStatus(lpStatus, 'Enter a Twilio number to add.', false);
         return;
       }
-      localPresenceMap[key] = rawNums;
+      const digits = rawNum.replace(/[^\d]/g, '');
+      let area = '';
+      if (digits.length === 11 && digits.startsWith('1')) {
+        area = digits.slice(1, 4);
+      } else if (digits.length >= 10) {
+        area = digits.slice(0, 3);
+      }
+      if (!area) {
+        setStatus(lpStatus, 'Unable to detect area code from that number.', false);
+        return;
+      }
+      const key = area;
+      const pool = Array.isArray(localPresenceMap[key]) ? localPresenceMap[key] : (localPresenceMap[key] ? [localPresenceMap[key]] : []);
+      if (!pool.includes(rawNum)) {
+        pool.push(rawNum);
+      }
+      localPresenceMap[key] = pool;
       await saveLocalPresence();
     }
 

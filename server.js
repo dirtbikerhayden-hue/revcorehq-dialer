@@ -104,6 +104,7 @@ const RECENT_DIAL_FILE = path.join(DATA_DIR, 'recent-dials.json');
 const RECENT_PHONE_DIAL_FILE = path.join(DATA_DIR, 'recent-phone-dials.json');
 const AGENT_METRICS_FILE = path.join(DATA_DIR, 'agent-metrics.json');
 const SCRIPTS_FILE = path.join(DATA_DIR, 'scripts.json');
+const CALLER_ID_USAGE_FILE = path.join(DATA_DIR, 'caller-id-usage.json');
 // High-priority inbound agents can be set later via config; default empty.
 const PRIORITY_INBOUND_AGENTS = [];
 
@@ -182,6 +183,32 @@ function saveScriptsStore() {
 }
 
 let scriptsStore = loadScriptsStore();
+
+function loadCallerIdUsage() {
+  try {
+    if (!fs.existsSync(CALLER_ID_USAGE_FILE)) {
+      fs.writeFileSync(CALLER_ID_USAGE_FILE, JSON.stringify({}, null, 2));
+      return {};
+    }
+    const raw = fs.readFileSync(CALLER_ID_USAGE_FILE, 'utf8');
+    const parsed = JSON.parse(raw) || {};
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed;
+  } catch (err) {
+    console.error('Error loading caller-id-usage.json:', err);
+    return {};
+  }
+}
+
+function saveCallerIdUsage() {
+  try {
+    fs.writeFileSync(CALLER_ID_USAGE_FILE, JSON.stringify(callerIdUsage, null, 2));
+  } catch (err) {
+    console.error('Error saving caller-id-usage.json:', err);
+  }
+}
+
+let callerIdUsage = loadCallerIdUsage();
 
 function normalizePhone(num) {
   if (!num) return '';
@@ -451,6 +478,101 @@ const VOICEMAIL_OUTCOMES = [
   'machine_voicemail',
   'left_voicemail'
 ];
+const AREA_TO_STATE = {
+  // Partial NANPA map for common areas; can be extended over time.
+  // Pennsylvania
+  '215': 'PA',
+  '267': 'PA',
+  '272': 'PA',
+  '412': 'PA',
+  '445': 'PA',
+  '484': 'PA',
+  '570': 'PA',
+  '582': 'PA',
+  '610': 'PA',
+  '717': 'PA',
+  '724': 'PA',
+  '835': 'PA',
+  '878': 'PA',
+  // Georgia
+  '404': 'GA',
+  '470': 'GA',
+  '678': 'GA',
+  '770': 'GA',
+  '912': 'GA',
+  // Arizona
+  '480': 'AZ',
+  '520': 'AZ',
+  '602': 'AZ',
+  '623': 'AZ',
+  '928': 'AZ',
+  // California
+  '209': 'CA',
+  '213': 'CA',
+  '279': 'CA',
+  '310': 'CA',
+  '323': 'CA',
+  '408': 'CA',
+  '415': 'CA',
+  '424': 'CA',
+  '442': 'CA',
+  '510': 'CA',
+  '530': 'CA',
+  '559': 'CA',
+  '562': 'CA',
+  '619': 'CA',
+  '626': 'CA',
+  '650': 'CA',
+  '657': 'CA',
+  '661': 'CA',
+  '669': 'CA',
+  '707': 'CA',
+  '714': 'CA',
+  '747': 'CA',
+  '752': 'CA',
+  '760': 'CA',
+  '805': 'CA',
+  '818': 'CA',
+  '820': 'CA',
+  '831': 'CA',
+  '840': 'CA',
+  '858': 'CA',
+  '909': 'CA',
+  '916': 'CA',
+  '925': 'CA',
+  '949': 'CA',
+  '951': 'CA',
+  // Florida
+  '305': 'FL',
+  '321': 'FL',
+  '352': 'FL',
+  '386': 'FL',
+  '407': 'FL',
+  '448': 'FL',
+  '561': 'FL',
+  '645': 'FL',
+  '689': 'FL',
+  '727': 'FL',
+  '754': 'FL',
+  '772': 'FL',
+  '786': 'FL',
+  '813': 'FL',
+  '850': 'FL',
+  '863': 'FL',
+  '904': 'FL',
+  '941': 'FL',
+  '954': 'FL',
+  // North Carolina
+  '252': 'NC',
+  '336': 'NC',
+  '704': 'NC',
+  '743': 'NC',
+  '828': 'NC',
+  '910': 'NC',
+  '919': 'NC',
+  '980': 'NC',
+  '984': 'NC'
+};
 const MAX_NON_PICKUP_ATTEMPTS = 3;
 const NON_PICKUP_REMOVED_TAG = 'removed 3 attempts made';
 const NON_PICKUP_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours for all non-pickup outcomes
@@ -1751,6 +1873,7 @@ app.post('/api/manual-dial', express.json(), async (req, res) => {
       statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
       machineDetection: appSettings.machineDetectionEnabled ? 'Enable' : undefined
     });
+    markCallerIdUsed(fromNumber, easternNow);
 
     callMap[call.sid] = {
       agentId,
@@ -2794,22 +2917,78 @@ function getAreaCode(phone) {
   return phone.slice(2, 5);
 }
 
-function chooseLocalNumberForLead(leadPhone) {
-  const area = getAreaCode(leadPhone);
-  const candidates = [];
-  if (area) candidates.push(area);
-  // Optional global pool under key "default"
-  candidates.push('default');
+function markCallerIdUsed(rawNumber, easternNow) {
+  const num = normalizePhone(rawNumber || '');
+  if (!num) return;
+  const dateId = getDateId(easternNow || getEasternNow());
+  const entry = callerIdUsage[num] || { dateId, count: 0 };
+  if (entry.dateId !== dateId) {
+    entry.dateId = dateId;
+    entry.count = 0;
+  }
+  entry.count += 1;
+  callerIdUsage[num] = entry;
+  saveCallerIdUsage();
+}
 
-  for (const key of candidates) {
-    const pool = Array.isArray(localPresenceMap[key]) ? localPresenceMap[key] : null;
-    if (pool && pool.length) {
-      const idx = localPresenceCursor[key] || 0;
-      const chosen = pool[idx % pool.length];
-      localPresenceCursor[key] = (idx + 1) % pool.length;
-      const norm = normalizePhone(chosen);
-      if (norm) return norm;
+function getCallerIdCountToday(rawNumber, easternNow) {
+  const num = normalizePhone(rawNumber || '');
+  if (!num) return 0;
+  const dateId = getDateId(easternNow || getEasternNow());
+  const entry = callerIdUsage[num];
+  if (!entry || entry.dateId !== dateId) return 0;
+  return Number(entry.count || 0);
+}
+
+function chooseLeastUsedNumber(pool, easternNow) {
+  if (!Array.isArray(pool) || !pool.length) return null;
+  let best = null;
+  let bestCount = Infinity;
+  pool.forEach(num => {
+    const count = getCallerIdCountToday(num, easternNow);
+    if (count < bestCount) {
+      bestCount = count;
+      best = num;
     }
+  });
+  return best || null;
+}
+
+function chooseLocalNumberForLead(leadPhone) {
+  const easternNow = getEasternNow();
+  const area = getAreaCode(leadPhone);
+  // 1) Exact area code pool
+  if (area && Array.isArray(localPresenceMap[area]) && localPresenceMap[area].length) {
+    const chosenAreaNumber = chooseLeastUsedNumber(localPresenceMap[area], easternNow);
+    if (chosenAreaNumber) return normalizePhone(chosenAreaNumber);
+  }
+
+  // 2) Same-state fallback
+  let statePool = [];
+  if (area && AREA_TO_STATE[area]) {
+    const targetState = AREA_TO_STATE[area];
+    Object.entries(localPresenceMap || {}).forEach(([key, nums]) => {
+      const pool = Array.isArray(nums) ? nums : (nums ? [nums] : []);
+      const keyArea = key.replace(/[^\d]/g, '').slice(0, 3);
+      if (keyArea && AREA_TO_STATE[keyArea] === targetState) {
+        statePool = statePool.concat(pool);
+      }
+    });
+    if (statePool.length) {
+      const chosenStateNumber = chooseLeastUsedNumber(statePool, easternNow);
+      if (chosenStateNumber) return normalizePhone(chosenStateNumber);
+    }
+  }
+
+  // 3) Global pool fallback (all configured numbers)
+  let globalPool = [];
+  Object.values(localPresenceMap || {}).forEach(nums => {
+    const pool = Array.isArray(nums) ? nums : (nums ? [nums] : []);
+    globalPool = globalPool.concat(pool);
+  });
+  if (globalPool.length) {
+    const chosenGlobalNumber = chooseLeastUsedNumber(globalPool, easternNow);
+    if (chosenGlobalNumber) return normalizePhone(chosenGlobalNumber);
   }
 
   return defaultCallerId;
@@ -3209,6 +3388,7 @@ app.post('/api/dialer/next', async (req, res) => {
         ? { machineDetection: 'Enable', machineDetectionTimeout: 30 }
         : {})
     });
+    markCallerIdUsed(fromNumber, easternNow);
 
     const leadPayload = {
       ...lead,
