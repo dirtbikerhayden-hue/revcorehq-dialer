@@ -85,8 +85,10 @@ app.all('/twilio/inbound/fallback', (req, res) => {
     return res.type('text/xml').send(twiml.toString());
   }
 
-  const normalizedTo = normalizePhone(toNumber);
-  const dial = twiml.dial({ timeout: 20, callerId: normalizedTo || defaultCallerId });
+  // Preserve the original caller's number when ringing fallback agents,
+  // so the softphone shows the true inbound caller instead of our DID.
+  const callerId = normalizePhone(fromNumber) || normalizePhone(toNumber) || defaultCallerId;
+  const dial = twiml.dial({ timeout: 20, callerId });
   allTargets.forEach(id => dial.client(id));
 
   res.type('text/xml').send(twiml.toString());
@@ -2385,7 +2387,10 @@ function buildSequentialInbound(twiml, fromNumber, toNumber) {
 
   const attempted = encodeURIComponent(primary);
   const actionUrl = `${BASE_URL}/twilio/inbound/fallback?from=${encodeURIComponent(fromNumber || '')}&to=${encodeURIComponent(toNumber || '')}&attempted=${attempted}`;
-  const dial = twiml.dial({ timeout: 10, callerId: normalizePhone(toNumber) || defaultCallerId, action: actionUrl });
+  // For inbound calls, preserve the original caller's number as the callerId
+  // so agents see who is actually calling instead of our Twilio DID.
+  const callerId = normalizePhone(fromNumber) || normalizePhone(toNumber) || defaultCallerId;
+  const dial = twiml.dial({ timeout: 10, callerId, action: actionUrl });
   dial.client(primary);
   return true;
 }
