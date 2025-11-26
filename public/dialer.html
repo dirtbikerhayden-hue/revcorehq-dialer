@@ -1333,6 +1333,7 @@
             <button class="btn-dispo" data-dispo="machine_voicemail">Machine / Voicemail</button>
             <button class="btn-dispo" data-dispo="bad_number">Bad Number</button>
             <button class="btn-dispo booked" data-dispo="booked">BOOKED Demo</button>
+            <button class="btn-second-attempt" id="btnSecondAttempt" type="button">Make 2nd Call Attempt</button>
           </div>
 
           <label for="notes">
@@ -2670,16 +2671,45 @@
     document.querySelectorAll('.btn-dispo').forEach(btn => {
       btn.addEventListener('click', () => {
         const outcome = btn.getAttribute('data-dispo');
-        let options = {};
-        if (outcome === 'left_voicemail' || outcome === 'machine_voicemail') {
-          const wantsRetry = window.confirm('Call this number one more time right now?');
-          if (wantsRetry) {
-            options.allowImmediateRetry = true;
-          }
-        }
-        sendDisposition(outcome, false, options);
+        sendDisposition(outcome, false, {});
       });
     });
+
+    const secondAttemptBtn = document.getElementById('btnSecondAttempt');
+    if (secondAttemptBtn) {
+      secondAttemptBtn.addEventListener('click', async () => {
+        if (!agentId || !currentLead) return;
+        if (activeConnection) return;
+        const number = (currentLead.phone || '').trim();
+        if (!number) return;
+        const campaignIdForCall = currentLead.isInbound
+          ? null
+          : (currentCampaignId || assignedCampaignId || null);
+        statusTextEl.textContent = 'Starting 2nd call attempt…';
+        pendingManualPhone = number;
+        try {
+          const res = await fetch('/api/manual-dial', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              toNumber: number,
+              callerId: '',
+              campaignId: campaignIdForCall,
+              reason: 'second_attempt'
+            })
+          });
+          const data = await res.json();
+          if (!data.ok) {
+            statusTextEl.textContent = data.error || 'Failed to start 2nd call attempt.';
+          } else {
+            statusTextEl.textContent = '2nd call attempt started.';
+          }
+        } catch (err) {
+          console.error('second attempt error', err);
+          statusTextEl.textContent = 'Error starting 2nd call attempt.';
+        }
+      });
+    }
 
     // Dedicated hangup button for the active call (does not end session)
     const hangupBtn = document.createElement('button');
