@@ -870,12 +870,7 @@
           </div>
           <div class="field-row">
             <div>
-              <label for="userOutboundInput">Outbound Number</label>
-              <input id="userOutboundInput" placeholder="+15551234567" />
-              <div class="field-note">Number we dial to reach the agent.</div>
-            </div>
-            <div>
-              <label for="userInboundInput">Inbound Number (optional)</label>
+              <label for="userInboundInput">Agent Phone / Inbound Number (optional)</label>
               <input id="userInboundInput" placeholder="+15557654321" />
               <div class="field-note">If set, inbound calls to this number route to this agent first.</div>
             </div>
@@ -1597,17 +1592,14 @@
       const s = ((statusInfo && statusInfo.status) || 'offline').toLowerCase();
       const durationText = formatStatusDuration(statusInfo ? statusInfo.duration : null);
       let cls = 'status-badge status-offline';
-      let label = `Offline · ${durationText}`;
+      let label = 'Offline';
 
       if (s === 'online' || s === 'active') {
         cls = 'status-badge status-active';
-        label = 'Online';
+        label = 'Online – Available';
       } else if (s === 'on_call') {
         cls = 'status-badge status-active';
-        label = `On Call · ${durationText}`;
-      } else if (s === 'idle') {
-        cls = 'status-badge status-idle';
-        label = `Idle · ${durationText}`;
+        label = `DND – On Call · ${durationText}`;
       } else if (s === 'away') {
         cls = 'status-badge status-idle';
         label = `Away · ${durationText}`;
@@ -2465,7 +2457,6 @@
       const role = roleSelect.value || 'agent';
       const campaignId = userCampaignSelect ? userCampaignSelect.value : '';
       const backupCampaignId = userBackupCampaignSelect ? userBackupCampaignSelect.value : '';
-      const outboundNumber = userOutboundInput ? userOutboundInput.value.trim() : '';
       const inboundNumber = userInboundInput ? userInboundInput.value.trim() : '';
       const allowAfterHours = userAfterHoursToggle ? userAfterHoursToggle.checked : false;
 
@@ -2476,7 +2467,7 @@
 
       const { ok, data } = await adminFetch('/api/admin/users', {
         method: 'POST',
-        body: JSON.stringify({ username, password, role, campaignId, backupCampaignId, outboundNumber, inboundNumber, allowAfterHours })
+        body: JSON.stringify({ username, password, role, campaignId, backupCampaignId, inboundNumber, allowAfterHours })
       });
 
       if (!ok) {
@@ -2489,7 +2480,6 @@
         roleSelect.value = 'agent';
         if (userCampaignSelect) userCampaignSelect.value = '';
         if (userBackupCampaignSelect) userBackupCampaignSelect.value = '';
-        if (userOutboundInput) userOutboundInput.value = '';
         if (userInboundInput) userInboundInput.value = '';
         if (userAfterHoursToggle) userAfterHoursToggle.checked = false;
         await loadLeaderboard();
@@ -2578,7 +2568,6 @@
       const role = roleSelect.value || 'agent';
       const campaignId = userCampaignSelect ? userCampaignSelect.value : '';
       const backupCampaignId = userBackupCampaignSelect ? userBackupCampaignSelect.value : '';
-      const outboundNumber = userOutboundInput ? userOutboundInput.value.trim() : '';
       const inboundNumber = userInboundInput ? userInboundInput.value.trim() : '';
       const allowAfterHours = userAfterHoursToggle ? userAfterHoursToggle.checked : false;
 
@@ -2587,7 +2576,6 @@
       if (role) payload.role = role;
       payload.campaignId = campaignId;
       payload.backupCampaignId = backupCampaignId;
-      payload.outboundNumber = outboundNumber;
       payload.inboundNumber = inboundNumber;
       payload.allowAfterHours = allowAfterHours;
 
@@ -2606,7 +2594,6 @@
         roleSelect.value = 'agent';
         if (userCampaignSelect) userCampaignSelect.value = '';
         if (userBackupCampaignSelect) userBackupCampaignSelect.value = '';
-        if (userOutboundInput) userOutboundInput.value = '';
         if (userInboundInput) userInboundInput.value = '';
         await loadLeaderboard();
         await loadUsers();

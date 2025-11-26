@@ -1276,14 +1276,12 @@ app.post('/api/admin/users', express.json(), (req, res) => {
     role,
     campaignId,
     backupCampaignId,
-    outboundNumber,
     inboundNumber,
     allowAfterHours
   } = req.body || {};
   const normalizedUsername = normalizeUsername(username);
   const normalizedCampaignId = campaignId ? String(campaignId) : null;
   const normalizedBackupCampaignId = backupCampaignId ? String(backupCampaignId) : null;
-  const normalizedOutbound = outboundNumber ? normalizePhone(outboundNumber) : '';
   const normalizedInbound = inboundNumber ? normalizePhone(inboundNumber) : '';
 
   if (!normalizedUsername || !password) {
@@ -1310,7 +1308,6 @@ app.post('/api/admin/users', express.json(), (req, res) => {
     role: role || 'agent',
     campaignId: normalizedCampaignId,
     backupCampaignId: normalizedBackupCampaignId,
-    outboundNumber: normalizedOutbound,
     inboundNumber: normalizedInbound,
     allowAfterHours: !!allowAfterHours
   };
@@ -1333,7 +1330,6 @@ app.put('/api/admin/users/:username', express.json(), (req, res) => {
     role,
     campaignId,
     backupCampaignId,
-    outboundNumber,
     inboundNumber,
     allowAfterHours
   } = req.body || {};
@@ -1343,11 +1339,6 @@ app.put('/api/admin/users/:username', express.json(), (req, res) => {
   const normalizedBackupCampaignId = typeof backupCampaignId === 'undefined' || backupCampaignId === ''
     ? undefined
     : String(backupCampaignId);
-  const normalizedOutbound = typeof outboundNumber === 'undefined'
-    ? undefined
-    : outboundNumber === ''
-      ? ''
-      : normalizePhone(outboundNumber);
   const normalizedInbound = typeof inboundNumber === 'undefined'
     ? undefined
     : inboundNumber === ''
@@ -1380,10 +1371,6 @@ app.put('/api/admin/users/:username', express.json(), (req, res) => {
       typeof normalizedBackupCampaignId !== 'undefined'
         ? normalizedBackupCampaignId || null
         : current.backupCampaignId || null,
-    outboundNumber:
-      typeof normalizedOutbound !== 'undefined'
-        ? normalizedOutbound
-        : current.outboundNumber || '',
     inboundNumber:
       typeof normalizedInbound !== 'undefined'
         ? normalizedInbound
@@ -2111,8 +2098,8 @@ function getDialNumberForAgent(agentId) {
   const normalizedId = normalizeUsername(agentId);
   if (!normalizedId) return null;
   const user = users[normalizedId];
-  if (!user || !user.outboundNumber) return null;
-  const normalized = normalizePhone(user.outboundNumber);
+  if (!user || !user.inboundNumber) return null;
+  const normalized = normalizePhone(user.inboundNumber);
   return normalized || null;
 }
 
@@ -2859,14 +2846,10 @@ function getAgentStatus(agentId) {
 
   const diffMinutes = (Date.now() - m.lastActivityMs) / 60000;
 
-  // 0–2 minutes since last activity: actively online
-  if (diffMinutes <= 2) return 'online';
-  // 2–10 minutes: idle (dialer open but not recently active)
-  if (diffMinutes <= 10) return 'idle';
-  // 10–30 minutes: away
-  if (diffMinutes <= 30) return 'away';
-  // 30+ minutes: offline
-  return 'offline';
+  // Active within last 30 minutes: online/available
+  if (diffMinutes <= 30) return 'online';
+  // Otherwise: away
+  return 'away';
 }
 
 // =========================

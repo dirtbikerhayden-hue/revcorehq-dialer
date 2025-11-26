@@ -1405,6 +1405,16 @@
         </div>
       </section>
 
+      <section class="card team-status-card">
+        <div class="card-inner">
+          <div class="side-card-title" style="margin-bottom:4px;">Team Status</div>
+          <p style="margin: 0 0 8px; color: var(--text-subtle); font-size: 0.78rem;">
+            Live view of who is available or on calls.
+          </p>
+          <ul class="log-list" id="teamStatusList"></ul>
+        </div>
+      </section>
+
       <section class="card activity-card">
         <div class="card-inner">
           <div class="side-card-title">Recent Activity</div>
@@ -1611,6 +1621,7 @@
     const incomingRejectBtn   = document.getElementById('incomingRejectBtn');
     const incomingMuteBtn     = document.getElementById('incomingMuteBtn');
     const incomingEndBtn      = document.getElementById('incomingEndBtn');
+    const teamStatusList      = document.getElementById('teamStatusList');
     const clockEstEl          = document.getElementById('clockEST');
     const clockPstEl          = document.getElementById('clockPST');
     const prospectTimezoneDisplayEl = document.getElementById('prospectTimezoneDisplay');
@@ -2317,6 +2328,34 @@
             </li>
           `;
         }).join('');
+
+        if (teamStatusList) {
+          const agents = Array.isArray(top) ? top : [];
+          if (!agents.length) {
+            teamStatusList.innerHTML = `
+              <li class="log-item">
+                <div class="log-main">No agent metrics yet.</div>
+              </li>
+            `;
+          } else {
+            teamStatusList.innerHTML = agents.map(row => {
+              const displayName = formatAgentIdDisplay(row.agentId);
+              const isMe = row.agentId === agentId;
+              const label = isMe ? `${displayName} (You)` : displayName;
+              let statusLabel = 'Offline';
+              const s = (row.status || '').toLowerCase();
+              if (s === 'on_call') statusLabel = 'DND – On Call';
+              else if (s === 'online') statusLabel = 'Online – Available';
+              else if (s === 'away') statusLabel = 'Away';
+              return `
+                <li class="log-item">
+                  <div class="log-main">${label}</div>
+                  <div class="log-meta">${statusLabel}</div>
+                </li>
+              `;
+            }).join('');
+          }
+        }
       } catch (e) {
         console.error('leaderboard error', e);
       }
