@@ -436,6 +436,7 @@ const recentPhoneDialMap = loadRecentPhoneDialMap();
 const contactLocks = {}; // in-memory lock so a contact isn't dialed twice concurrently
 const campaignLeadStatsCache = {};
 let ghlRateLimitedUntilMs = 0;
+const immediateRetryByAgent = {};
 const NON_PICKUP_OUTCOMES = [
   'no_answer',
   'busy',
@@ -444,6 +445,11 @@ const NON_PICKUP_OUTCOMES = [
   'machine_voicemail',
   'left_voicemail',
   'callback_requested'
+];
+const VOICEMAIL_OUTCOMES = [
+  'machine',
+  'machine_voicemail',
+  'left_voicemail'
 ];
 const MAX_NON_PICKUP_ATTEMPTS = 3;
 const NON_PICKUP_REMOVED_TAG = 'removed 3 attempts made';
@@ -3102,6 +3108,7 @@ app.get('/api/leaderboard', (req, res) => {
 app.post('/api/dialer/next', async (req, res) => {
   const agentId = requireAgent(req, res);
   if (!agentId) return;
+  const normalizedAgentId = normalizeUsername(agentId);
   const easternNow = ensureLeaderboardWeek();
   const reportDateId = getDateId(easternNow);
 
@@ -3125,31 +3132,62 @@ app.post('/api/dialer/next', async (req, res) => {
   const user = users[agentId] || {};
   const backupCampaignId = user.backupCampaignId || null;
 
+  let chosenCampaignId = null;
+  let campaign = null;
+  let lead = null;
+
+  // If the agent requested an immediate retry after a voicemail, honor that once.
+  const pendingRetry = immediateRetryByAgent[normalizedAgentId];
+  if (pendingRetry && (!resolvedCampaignId || String(resolvedCampaignId) === pendingRetry.campaignId)) {
+    delete immediateRetryByAgent[normalizedAgentId];
+    const retryCampaign = campaigns[pendingRetry.campaignId];
+    if (retryCampaign && pendingRetry.leadPhone) {
+      chosenCampaignId = pendingRetry.campaignId;
+      campaign = retryCampaign;
+      const meta = pendingRetry.meta || {};
+      lead = {
+        id: meta.ghlContactId || null,
+        name: pendingRetry.leadName || pendingRetry.leadPhone,
+        phone: pendingRetry.leadPhone,
+        email: null,
+        ghlOpportunityId: meta.ghlOpportunityId || null,
+        ghlContactId: meta.ghlContactId || null,
+        ghlPipelineId: retryCampaign.ghlPipelineId || null,
+        ghlStageId: retryCampaign.ghlStageId || null,
+        campaignTag: meta.campaignTag || retryCampaign.ghlTag || null,
+        localLeadId: meta.localLeadId || null,
+        localLeadName: meta.localLeadName || null,
+        localLeadPhone: meta.localLeadPhone || null
+      };
+      if (lead.ghlContactId) {
+        lockContact(lead.ghlContactId, chosenCampaignId, null);
+      }
+    }
+  }
+
   const candidateIds = [];
   if (resolvedCampaignId) candidateIds.push(resolvedCampaignId);
   if (backupCampaignId && backupCampaignId !== resolvedCampaignId) {
     candidateIds.push(backupCampaignId);
   }
 
-  let chosenCampaignId = null;
-  let campaign = null;
-  let lead = null;
-
-  for (const cid of candidateIds) {
-    const c = campaigns[cid];
-    if (!c) continue;
-    let candidateLead = null;
-    if (isGhlCampaign(c)) {
-      candidateLead = await fetchGhlLeadForCampaign(c);
-    }
-    if (!candidateLead) {
-      candidateLead = popLocalLead(cid);
-    }
-    if (candidateLead) {
-      chosenCampaignId = cid;
-      campaign = c;
-      lead = candidateLead;
-      break;
+  if (!lead) {
+    for (const cid of candidateIds) {
+      const c = campaigns[cid];
+      if (!c) continue;
+      let candidateLead = null;
+      if (isGhlCampaign(c)) {
+        candidateLead = await fetchGhlLeadForCampaign(c);
+      }
+      if (!candidateLead) {
+        candidateLead = popLocalLead(cid);
+      }
+      if (candidateLead) {
+        chosenCampaignId = cid;
+        campaign = c;
+        lead = candidateLead;
+        break;
+      }
     }
   }
 
@@ -3597,7 +3635,7 @@ app.post('/api/contact/email', express.json(), async (req, res) => {
 });
 
 app.post('/api/disposition', async (req, res) => {
-  const { agentId, campaignId, outcome, notes, leadPhone, leadName } = req.body;
+  const { agentId, campaignId, outcome, notes, leadPhone, leadName, allowImmediateRetry } = req.body;
   const easternNow = ensureLeaderboardWeek();
   const normalizedAgentId = normalizeUsername(agentId);
   const dialInfo = users && normalizedAgentId ? users[normalizedAgentId] : null;
@@ -3647,6 +3685,12 @@ app.post('/api/disposition', async (req, res) => {
   let meta = activeLeadMetaByAgent[agentId];
   let contactIdForStats = meta?.ghlContactId || null;
 
+  const wantsImmediateRetry =
+    !!allowImmediateRetry &&
+    VOICEMAIL_OUTCOMES.includes(safeOutcome) &&
+    !meta?.isInbound &&
+    !!leadPhone;
+
   const reportDateId = getDateId(easternNow);
   if (isWithinDailyReportWindow(easternNow) && isWithinWeeklyReportWindow(easternNow)) {
     const dailyAgent = ensureDailyAgentMetric(reportDateId, agentId);
@@ -3671,6 +3715,27 @@ app.post('/api/disposition', async (req, res) => {
       dailyCampaign.dispositions[safeOutcome] = (dailyCampaign.dispositions[safeOutcome] || 0) + 1;
     }
     saveReportMetrics();
+  }
+
+  if (wantsImmediateRetry) {
+    const retryCampaignId = String(campaignId || (meta && meta.campaignId) || '');
+    if (retryCampaignId) {
+      immediateRetryByAgent[normalizedAgentId] = {
+        campaignId: retryCampaignId,
+        leadPhone,
+        leadName: leadName || null,
+        meta: meta
+          ? {
+              ghlContactId: meta.ghlContactId || null,
+              ghlOpportunityId: meta.ghlOpportunityId || null,
+              campaignTag: meta.campaignTag || null,
+              localLeadId: meta.localLeadId || null,
+              localLeadName: meta.localLeadName || leadName || null,
+              localLeadPhone: meta.localLeadPhone || leadPhone
+            }
+          : null
+      };
+    }
   }
 
   // If this was a manual call (no active meta) but we have a campaign + phone,

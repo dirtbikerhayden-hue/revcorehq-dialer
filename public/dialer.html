@@ -2415,7 +2415,7 @@
       }
     }
 
-   async function sendDisposition(outcome, isAuto = false) {
+   async function sendDisposition(outcome, isAuto = false, options = {}) {
      if (!agentId) {
        statusTextEl.textContent = 'No agent ID — please re-login.';
        return;
@@ -2429,6 +2429,7 @@
        finalOutcome = 'bad_number';
      }
 
+     const allowImmediateRetry = !!options.allowImmediateRetry;
      const notes      = isAuto
        ? '[AUTO] No softphone connection / timeout'
        : (notesEl.value || '');
@@ -2451,6 +2452,7 @@
            agentId,
            campaignId,
            outcome: finalOutcome,
+           allowImmediateRetry,
            notes,
            leadPhone,
            leadName
@@ -2508,7 +2510,14 @@
     document.querySelectorAll('.btn-dispo').forEach(btn => {
       btn.addEventListener('click', () => {
         const outcome = btn.getAttribute('data-dispo');
-        sendDisposition(outcome);
+        let options = {};
+        if (outcome === 'left_voicemail' || outcome === 'machine_voicemail') {
+          const wantsRetry = window.confirm('Call this number one more time right now?');
+          if (wantsRetry) {
+            options.allowImmediateRetry = true;
+          }
+        }
+        sendDisposition(outcome, false, options);
       });
     });
 
