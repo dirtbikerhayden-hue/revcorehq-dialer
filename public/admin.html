@@ -898,7 +898,6 @@
               <th>Role</th>
               <th>Status</th>
               <th>Campaign</th>
-              <th>Outbound #</th>
               <th>Inbound #</th>
               <th>Password</th>
               <th class="actions-col">Actions</th>
@@ -906,7 +905,7 @@
           </thead>
           <tbody id="usersTableBody">
             <tr>
-              <td colspan="7" style="padding:10px 8px; color:var(--text-soft);">
+              <td colspan="6" style="padding:10px 8px; color:var(--text-soft);">
                 Unlock admin to view and manage users.
               </td>
             </tr>
@@ -1329,7 +1328,6 @@
     const newUsernameInput = document.getElementById('newUsernameInput');
     const roleSelect = document.getElementById('roleSelect');
     const userCampaignSelect = document.getElementById('userCampaignSelect');
-    const userOutboundInput = document.getElementById('userOutboundInput');
     const userInboundInput = document.getElementById('userInboundInput');
     const userAfterHoursToggle = document.getElementById('userAfterHoursToggle');
     const userBackupCampaignSelect = document.getElementById('userBackupCampaignSelect');
@@ -2278,7 +2276,7 @@
         setStatus(userStatus, data.error || 'Failed to load users', false);
         usersTableBody.innerHTML = `
           <tr>
-            <td colspan="7" style="padding:8px; color:#fecaca;">
+            <td colspan="6" style="padding:8px; color:#fecaca;">
               Could not load users. Check admin password or backend.
             </td>
           </tr>
@@ -2295,7 +2293,7 @@
       if (!entries.length) {
         usersTableBody.innerHTML = `
           <tr>
-            <td colspan="7" style="padding:8px; color:var(--text-soft);">
+            <td colspan="6" style="padding:8px; color:var(--text-soft);">
               No users yet. Create your first outbound seat above.
             </td>
           </tr>
@@ -2307,7 +2305,6 @@
         const statusInfo = statusByAgent[username] || { status: 'offline', duration: null };
         const campaignId = info.campaignId || '';
         const campaignLabel = campaignId ? (campaignMap[campaignId]?.name || campaignId) : '—';
-        const outbound = info.outboundNumber || '—';
         const inbound = info.inboundNumber || '—';
         const afterHoursBadge = info.allowAfterHours === true
           ? '<span class="badge-soft" style="margin-left:4px;font-size:10px;padding:2px 6px;">After-hours</span>'
@@ -2318,13 +2315,12 @@
           <td>${info.role || 'agent'}</td>
           <td>${statusBadge(statusInfo)}</td>
           <td>${campaignLabel}</td>
-          <td>${outbound}</td>
           <td>${inbound}</td>
           <td>${info.password || ''}</td>
           <td>
             <div class="actions-cell">
               <button class="btn btn-secondary btn-mini"
-                onclick="fillUserForm('${username.replace(/'/g, "\\'")}', '${(info.password || '').replace(/'/g, "\\'")}', '${(info.role || 'agent').replace(/'/g, "\\'")}', '${campaignId.replace(/'/g, "\\'")}', '${(info.backupCampaignId || '').replace(/'/g, "\\'")}', '${(info.outboundNumber || '').replace(/'/g, "\\'")}', '${(info.inboundNumber || '').replace(/'/g, "\\'")}', ${info.allowAfterHours === true ? 'true' : 'false'})">
+                onclick="fillUserForm('${username.replace(/'/g, "\\'")}', '${(info.password || '').replace(/'/g, "\\'")}', '${(info.role || 'agent').replace(/'/g, "\\'")}', '${campaignId.replace(/'/g, "\\'")}', '${(info.backupCampaignId || '').replace(/'/g, "\\'")}', '${(info.inboundNumber || '').replace(/'/g, "\\'")}', ${info.allowAfterHours === true ? 'true' : 'false'})">
                 Edit
               </button>
               <button class="btn btn-danger btn-mini"
@@ -2339,7 +2335,7 @@
     }
 
     // expose for onclick
-    window.fillUserForm = (username, password, role, campaignId, backupCampaignId, outboundNumber, inboundNumber, allowAfterHours) => {
+    window.fillUserForm = (username, password, role, campaignId, backupCampaignId, inboundNumber, allowAfterHours) => {
       usernameInput.value = username;
       newUsernameInput.value = "";
       passwordInput.value = password;
@@ -2350,7 +2346,6 @@
       if (userBackupCampaignSelect) {
         userBackupCampaignSelect.value = backupCampaignId || '';
       }
-      if (userOutboundInput) userOutboundInput.value = outboundNumber || '';
       if (userInboundInput) userInboundInput.value = inboundNumber || '';
        if (userAfterHoursToggle) {
          userAfterHoursToggle.checked = allowAfterHours === true || allowAfterHours === 'true';
