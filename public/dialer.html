@@ -1511,6 +1511,7 @@
     let audioAccessPromise = null;
     let voiceSetupPromise = null;
     let pendingManualPhone = null;
+    let expectingCampaignLeg = false;
     let pendingIncomingCall = null;
     let keypadModal = null;
     let pendingDialTimeoutId = null;
@@ -2547,6 +2548,9 @@
         const lead = data.lead || {};
         lead.campaignName = campaignName;
         setCurrentLead(lead);
+        // We are now expecting Twilio to connect an outbound campaign leg
+        // back to this browser client.
+        expectingCampaignLeg = true;
         statusTextEl.innerHTML = `Dialing <span>${lead.name}</span> at <span>${lead.phone}</span>…`;
         pushLog(`Dialing ${lead.name || 'Lead'} • ${lead.phone || ''}`, 'CALL');
         fetchMetrics();
@@ -3036,6 +3040,7 @@
         clearTimeout(pendingDialTimeoutId);
         pendingDialTimeoutId = null;
       }
+      expectingCampaignLeg = false;
       activeConnection = null;
       setMuteState(false);
       if (hasPendingDispo) {
@@ -3162,11 +3167,14 @@
 
           const from = call.parameters?.From || 'Unknown';
 
-          // Auto-accept ONLY for manual outbound calls we initiated.
+          // Auto-accept ONLY for outbound legs we initiated:
+          //  - manual dials (pendingManualPhone)
+          //  - campaign dials where we just pulled a lead (expectingCampaignLeg)
           // All true inbound calls (including callbacks) always show the popup.
           const isManualDialLeg = !!pendingManualPhone;
+          const isCampaignDialLeg = !!expectingCampaignLeg;
 
-          if (isManualDialLeg) {
+          if (isManualDialLeg || isCampaignDialLeg) {
             try {
               call.accept();
             } catch (e) {
