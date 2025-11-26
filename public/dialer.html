@@ -1390,7 +1390,11 @@
               </select>
               <small id="speakerSupportNote">Use Chrome to route the dialer audio to a headset.</small>
             </div>
-            <button class="audio-refresh-btn" id="audioRefreshBtn" type="button">↺ Refresh audio devices</button>
+            <div style="display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 6px;">
+              <button class="audio-refresh-btn" id="audioRefreshBtn" type="button">↺ Refresh audio devices</button>
+              <button class="audio-refresh-btn" id="audioTestSpeakerBtn" type="button">▶ Test speaker</button>
+              <button class="audio-refresh-btn" id="audioTestMicBtn" type="button">🎙 Test mic</button>
+            </div>
             <div class="audio-note" id="audioStatusNote">Microphone + speaker must be ready before dialing.</div>
           </div>
         </div>
@@ -1615,6 +1619,8 @@
     const micSelectEl         = document.getElementById('audioMicSelect');
     const speakerSelectEl     = document.getElementById('audioSpeakerSelect');
     const audioRefreshBtn     = document.getElementById('audioRefreshBtn');
+    const audioTestSpeakerBtn = document.getElementById('audioTestSpeakerBtn');
+    const audioTestMicBtn     = document.getElementById('audioTestMicBtn');
     const audioStatusNoteEl   = document.getElementById('audioStatusNote');
     const speakerSupportNoteEl = document.getElementById('speakerSupportNote');
     const incomingModal       = document.getElementById('incomingModal');
@@ -2089,6 +2095,109 @@
           speakerSelectEl.value = 'default';
           pendingSpeakerDeviceId = 'default';
         }
+      }
+    }
+
+    // Simple helper to update the audio status text.
+    function setAudioStatus(message, ok = true) {
+      if (!audioStatusNoteEl) return;
+      audioStatusNoteEl.textContent = message || '';
+      audioStatusNoteEl.style.color = ok ? 'var(--text-subtle)' : '#f97373';
+    }
+
+    // ---- Audio test helpers ----
+    let speakerTestAudio = null;
+    let micTestStream = null;
+    let micTestAnimationFrame = null;
+
+    function stopSpeakerTest() {
+      if (speakerTestAudio) {
+        try { speakerTestAudio.pause(); } catch (e) {}
+        speakerTestAudio = null;
+      }
+    }
+
+    function stopMicTest() {
+      if (micTestAnimationFrame) {
+        cancelAnimationFrame(micTestAnimationFrame);
+        micTestAnimationFrame = null;
+      }
+      if (micTestStream) {
+        micTestStream.getTracks().forEach(t => t.stop());
+        micTestStream = null;
+      }
+    }
+
+    async function runSpeakerTest() {
+      stopSpeakerTest();
+      try {
+        const audio = new Audio();
+        audio.loop = false;
+        // Very short silent test clip — just to confirm routing works.
+        audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
+        // If output selection is supported and we have a chosen device, try to route to it.
+        if (audio.setSinkId && pendingSpeakerDeviceId && pendingSpeakerDeviceId !== 'default') {
+          try {
+            await audio.setSinkId(pendingSpeakerDeviceId);
+          } catch (e) {
+            console.warn('setSinkId failed, using default output', e);
+          }
+        }
+        speakerTestAudio = audio;
+        setAudioStatus('Playing test sound on selected speaker…');
+        await audio.play();
+        setTimeout(() => {
+          stopSpeakerTest();
+          setAudioStatus('Speaker test finished.');
+        }, 1200);
+      } catch (err) {
+        console.error('speaker test error', err);
+        setAudioStatus('Unable to play test sound. Check output device.', false);
+      }
+    }
+
+    async function runMicTest() {
+      stopMicTest();
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setAudioStatus('Browser cannot access microphone for test.', false);
+        return;
+      }
+      try {
+        const constraints = {
+          audio: pendingMicDeviceId && pendingMicDeviceId !== 'default'
+            ? { deviceId: { exact: pendingMicDeviceId } }
+            : true
+        };
+        micTestStream = await navigator.mediaDevices.getUserMedia(constraints);
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioCtx();
+        const source = audioCtx.createMediaStreamSource(micTestStream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        const loop = () => {
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < bufferLength; i += 1) sum += dataArray[i];
+          const avg = sum / bufferLength;
+          const level = Math.min(100, Math.max(0, Math.round((avg / 255) * 100)));
+          setAudioStatus(`Mic level: ${level}% — speak to see this change.`, true);
+          micTestAnimationFrame = requestAnimationFrame(loop);
+        };
+        setAudioStatus('Mic test running…', true);
+        loop();
+        // Auto stop after ~10 seconds so it doesn’t run forever.
+        setTimeout(() => {
+          stopMicTest();
+          setAudioStatus('Mic test finished.', true);
+        }, 10000);
+      } catch (err) {
+        console.error('mic test error', err);
+        setAudioStatus('Unable to start mic test. Check mic permissions / device.', false);
+        stopMicTest();
       }
     }
 
@@ -2824,6 +2933,18 @@
     if (audioRefreshBtn) {
       audioRefreshBtn.addEventListener('click', () => {
         refreshAudioDeviceLists(true);
+      });
+    }
+
+    if (audioTestSpeakerBtn) {
+      audioTestSpeakerBtn.addEventListener('click', () => {
+        runSpeakerTest();
+      });
+    }
+
+    if (audioTestMicBtn) {
+      audioTestMicBtn.addEventListener('click', () => {
+        runMicTest();
       });
     }
 
