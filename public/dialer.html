@@ -3113,8 +3113,8 @@
           bumpCallState('Agent ringing');
 
           const from = call.parameters?.From || 'Unknown';
-          if (sessionState === 'running') {
-            // Outbound campaign leg – auto-accept without requiring user click
+          if (sessionState === 'running' || pendingManualPhone) {
+            // Outbound campaign or manual-dial leg – auto-accept without requiring user click
             try {
               call.accept();
             } catch (e) {
@@ -3127,6 +3127,9 @@
           }
 
           call.on('accept', () => {
+            // Once the agent accepts, remove the overlay so it
+            // doesn't block interaction with the main dialer UI.
+            hideIncomingModal();
             if (!currentLead) {
               const rawFrom = from;
               const inboundPhone = formatDisplayPhone(rawFrom);
