@@ -2404,9 +2404,9 @@
           console.warn('[Dialer] Softphone did not connect in time; auto-marking bad number.');
           statusTextEl.innerHTML =
             'No ringback / audio detected. Auto-tagging this lead as ' +
-            '<span>Failed</span> and moving to the next lead.';
+            '<span>Bad Number</span> and moving to the next lead.';
           sendDisposition('failed', true);
-        }, 4000);
+        }, 7000);
 
       } catch (e) {
         console.error('dial error', e);
@@ -2422,6 +2422,13 @@
      }
      if (!currentLead || !hasPendingDispo) return;
 
+     // For auto-dispositions triggered by the dialer safety timeout,
+     // treat them as Bad Number so they do not keep re-entering the queue.
+     let finalOutcome = outcome;
+     if (isAuto && outcome === 'failed') {
+       finalOutcome = 'bad_number';
+     }
+
      const notes      = isAuto
        ? '[AUTO] No softphone connection / timeout'
        : (notesEl.value || '');
@@ -2431,7 +2438,7 @@
        ? null
        : (currentCampaignId || assignedCampaignId);
 
-     const friendlyLabel = DISPOSITION_LABELS[outcome] || outcome;
+     const friendlyLabel = DISPOSITION_LABELS[finalOutcome] || finalOutcome;
      statusTextEl.textContent = isAuto
        ? `Saving auto-disposition: ${friendlyLabel}…`
        : `Saving disposition: ${friendlyLabel}…`;
@@ -2443,7 +2450,7 @@
          body: JSON.stringify({
            agentId,
            campaignId,
-           outcome,
+           outcome: finalOutcome,
            notes,
            leadPhone,
            leadName
@@ -2460,7 +2467,7 @@
          friendlyLabel,
          'final'
        );
-       if (outcome === 'booked') {
+       if (finalOutcome === 'booked') {
          triggerBookedCelebration();
        }
        fetchMetrics();

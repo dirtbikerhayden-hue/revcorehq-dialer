@@ -2515,21 +2515,26 @@
         lpTableBody.innerHTML = `<tr><td colspan="3" style="padding:10px 8px; color:var(--text-soft);">No local presence numbers yet.</td></tr>`;
         return;
       }
-      lpTableBody.innerHTML = entries.map(([area, num]) => `
+      lpTableBody.innerHTML = entries.map(([area, nums]) => {
+        const pool = Array.isArray(nums) ? nums : (nums ? [nums] : []);
+        const display = pool.join(', ');
+        return `
         <tr>
           <td>${area}</td>
-          <td>${num}</td>
+          <td>${display}</td>
           <td style="white-space:nowrap;">
             <button class="btn btn-secondary btn-small" data-lp-edit="${area}">Edit</button>
             <button class="btn btn-danger btn-small" data-lp-delete="${area}">Delete</button>
           </td>
-        </tr>
-      `).join('');
+        </tr>`;
+      }).join('');
       lpTableBody.querySelectorAll('[data-lp-edit]').forEach(btn => {
         btn.addEventListener('click', () => {
           const area = btn.getAttribute('data-lp-edit');
           lpAreaInput.value = area;
-          lpNumberInput.value = localPresenceMap[area] || '';
+          const nums = localPresenceMap[area];
+          const pool = Array.isArray(nums) ? nums : (nums ? [nums] : []);
+          lpNumberInput.value = pool.join(', ');
         });
       });
       lpTableBody.querySelectorAll('[data-lp-delete]').forEach(btn => {
@@ -2618,13 +2623,13 @@
         setStatus(lpStatus, 'Unlock admin first.', false);
         return;
       }
-      const area = (lpAreaInput.value || '').replace(/[^\d]/g, '').slice(0, 3);
-      const num = (lpNumberInput.value || '').trim();
-      if (!area || !num) {
-        setStatus(lpStatus, 'Area code and number required.', false);
+      const key = (lpAreaInput.value || '').trim();
+      const rawNums = (lpNumberInput.value || '').split(/[,;\s]+/).map(v => v.trim()).filter(Boolean);
+      if (!key || !rawNums.length) {
+        setStatus(lpStatus, 'Area/label and at least one number required.', false);
         return;
       }
-      localPresenceMap[area] = num;
+      localPresenceMap[key] = rawNums;
       await saveLocalPresence();
     }
 

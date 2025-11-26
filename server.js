@@ -1489,10 +1489,18 @@ app.put('/api/admin/local-presence', express.json(), (req, res) => {
   }
   const incoming = req.body?.map || {};
   const cleaned = {};
-  Object.entries(incoming).forEach(([area, num]) => {
-    const normArea = (area || '').replace(/[^\d]/g, '').slice(0, 3);
-    const normNum = normalizePhone(num);
-    if (normArea && normNum) cleaned[normArea] = normNum;
+  Object.entries(incoming).forEach(([key, value]) => {
+    const rawKey = (key || '').trim();
+    if (!rawKey) return;
+    const nums = Array.isArray(value) ? value : [value];
+    const pool = [];
+    nums.forEach(num => {
+      const normNum = normalizePhone(num);
+      if (normNum) pool.push(normNum);
+    });
+    if (pool.length) {
+      cleaned[rawKey] = pool;
+    }
   });
   localPresenceMap = cleaned;
   saveLocalPresence(localPresenceMap);
@@ -2745,7 +2753,22 @@ function loadLocalPresence() {
       return {};
     }
     const raw = fs.readFileSync(LOCAL_PRESENCE_FILE, 'utf8');
-    return JSON.parse(raw) || {};
+    const parsed = JSON.parse(raw) || {};
+    const cleaned = {};
+    Object.entries(parsed).forEach(([key, value]) => {
+      const k = (key || '').trim();
+      if (!k) return;
+      const arr = Array.isArray(value) ? value : [value];
+      const nums = [];
+      arr.forEach(num => {
+        const norm = normalizePhone(num);
+        if (norm) nums.push(norm);
+      });
+      if (nums.length) {
+        cleaned[k] = nums;
+      }
+    });
+    return cleaned;
   } catch (err) {
     console.error('Error loading local presence map:', err);
     return {};
@@ -2761,6 +2784,7 @@ function saveLocalPresence(map) {
 }
 
 let localPresenceMap = loadLocalPresence();
+const localPresenceCursor = {};
 const defaultCallerId = '+14158304289';
 
 function getAreaCode(phone) {
@@ -2770,7 +2794,22 @@ function getAreaCode(phone) {
 
 function chooseLocalNumberForLead(leadPhone) {
   const area = getAreaCode(leadPhone);
-  if (area && localPresenceMap[area]) return normalizePhone(localPresenceMap[area]);
+  const candidates = [];
+  if (area) candidates.push(area);
+  // Optional global pool under key "default"
+  candidates.push('default');
+
+  for (const key of candidates) {
+    const pool = Array.isArray(localPresenceMap[key]) ? localPresenceMap[key] : null;
+    if (pool && pool.length) {
+      const idx = localPresenceCursor[key] || 0;
+      const chosen = pool[idx % pool.length];
+      localPresenceCursor[key] = (idx + 1) % pool.length;
+      const norm = normalizePhone(chosen);
+      if (norm) return norm;
+    }
+  }
+
   return defaultCallerId;
 }
 
